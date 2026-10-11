@@ -35,7 +35,11 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": resolve(REPO_ROOT, "packages/ui/src"),
-        "@zcode/shared": resolve(REPO_ROOT, "packages/shared/src/index.ts"),
+        // 修复原因：@zcode/shared 是本包 workspace 依赖，其 package.json exports 已将
+        // 全部子路径映射到真实源文件。此前把别名指到单文件 src/index.ts，导致
+        // "@zcode/shared/zcode-protocol-v4" 等子路径被拼接成不存在的
+        // "src/index.ts/<subpath>"，build:bootstrap 在本包构建失败（WP1 审计发现 B1）。
+        // 删除该别名后，根入口与子路径统一走 exports 解析；@zcode/ui 未安装，仍需显式别名。
         // Share 镜像不安装 @zcode/ui（它会带入 services/rpc 闭包），子路径导入必须显式指向源码。
         "@zcode/ui/useTheme": resolve(REPO_ROOT, "packages/ui/src/useTheme.ts"),
         "@zcode/ui/conversation-share-readonly": resolve(
