@@ -63,9 +63,11 @@ jobs:
         # vitest 收集阶段直接失败；本地能跑是因为开发机已执行过 bootstrap 构建。
         run: pnpm build
       - name: Unit tests
-        # 豁免清单与 docs/testing/known-test-failures.md 保持同步。
-        # 注意：不要写成 `pnpm test:unit --exclude ...`——pnpm 会吞掉 --exclude
-        # 参数导致豁免失效（CI 首跑实证），豁免必须内建于 test:unit:ci 脚本。
+        # CI 实证（run 38179220502）：17926 用例全部通过后，threads worker 在
+        # 收尾阶段因长跑内存累积触发 ERR_WORKER_OUT_OF_MEMORY 使 job 失败；
+        # 提高 worker 堆上限。若仍复现，改用 ZCODE_TEST_POOL=forks 进程隔离。
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm test:unit:ci
 
   build:
