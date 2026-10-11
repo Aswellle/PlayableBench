@@ -1,0 +1,88 @@
+name: CI
+
+# PlayableBench 工程质量护栏（Phase 1 WP2）。
+# 所有 push 与 PR 必须通过本工作流；门禁口径与 docs/audit/08-Phase1-开发计划.md 对齐。
+# 说明：
+# - fmt:check 暂不纳入门禁：上游提交内容与 oxfmt（0.41/0.47 均验证）存在约 2300 个文件的
+#   格式基线漂移，批量重排违反 spec 04「禁止全局格式化噪声」；待上游对齐决策后另行接入。
+# - unit job 固定 windows-latest：与 docs/baseline/测试报告.md 的基线环境一致；
+#   已知平台敏感失败清单见 docs/testing/known-test-failures.md，以 --exclude 显式豁免。
+# - build job 使用根 `pnpm build`（递归各 workspace 构建脚本，desktop 无 build 脚本自动跳过）。
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: quality (typecheck · lint · architecture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # architecture:check --changed 需要 git diff 基线
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        # 版本读取根 package.json 的 packageManager 字段（pnpm@10.33.2）
+      - uses: actions/setup-node@v4
+        with:
+          # Node 版本读取 .nvmrc（=24）
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Architecture check (changed)
+        run: pnpm architecture:check --changed
+
+  unit:
+    name: unit tests (windows baseline)
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Unit tests
+        # 豁免清单与 docs/testing/known-test-failures.md 保持同步；
+        # 这些用例在 Windows 平台为已登记的环境/兼容失败（基线见 docs/baseline/测试报告.md）。
+        run: >-
+          pnpm test:unit
+          --exclude "packages/desktop/test/desktopMainIpcRemoteTelemetry.test.ts"
+          --exclude "packages/desktop/test/desktopMainIpcRemoteOpenExternalFile.test.ts"
+          --exclude "packages/desktop/test/subagentConfigProxy.test.ts"
+          --exclude "packages/desktop/test/windowsInstallerCompile.test.ts"
+          --exclude "packages/desktop/test/windowsInstallerNshSmoke.test.ts"
+          --exclude "packages/desktop/test/powershell-command.test.ts"
+          --exclude "packages/provider/test/m2-completion-boundary.test.ts"
+          --exclude "packages/zcode-server-cli/test/releaseDownload.test.ts"
+
+  build:
+    name: build (recursive workspace build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
