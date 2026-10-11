@@ -63,11 +63,13 @@ jobs:
         # vitest 收集阶段直接失败；本地能跑是因为开发机已执行过 bootstrap 构建。
         run: pnpm build
       - name: Unit tests
-        # CI 实证（run 38179220502）：17926 用例全部通过后，threads worker 在
-        # 收尾阶段因长跑内存累积触发 ERR_WORKER_OUT_OF_MEMORY 使 job 失败；
-        # 提高 worker 堆上限。若仍复现，改用 ZCODE_TEST_POOL=forks 进程隔离。
+        # CI 实证（run 38179220502/38181939996）：threads 池 worker 在整场收尾
+        # 阶段因长跑内存累积触发 ERR_WORKER_OUT_OF_MEMORY（NODE_OPTIONS 对
+        # worker_threads 堆上限不生效），连带 worker 在跑的用例失败。切换到
+        # 仓库自带的进程隔离开关（unit 项目 pool=forks、maxWorkers=2，
+        # 测试范围不变，见 vitest.config.ts）。
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
+          ZCODE_TEST_POOL: forks
         run: pnpm test:unit:ci
 
   build:
