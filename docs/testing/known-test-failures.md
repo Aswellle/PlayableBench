@@ -12,11 +12,12 @@
 - **环境失败**：运行环境资源/时序/权限导致（慢机超时、流超时、FS 竞态、命名管道、服务管理器），代码本身无缺陷。
 - **已知兼容问题**：平台/区域差异（POSIX 路径、盘符 URL、8.3 短路径名、NSIS 编码、控制台代码页）。
 
-## 重要机制发现（CI 首跑实证）
+## 重要机制发现（CI 实证）
 
 1. **unit 测试依赖已构建的 workspace 包**：`@zcode/e2e-report`、`@zcode/adapters/storage` 等以构建产物（dist）为解析入口，仅 `pnpm install` 会在 vitest 收集阶段直接失败（4 个 suite）。CI unit job 已加 `pnpm build` 前置步骤；本地开发依赖 bootstrap 构建过。
-2. **pnpm 会吞掉命令行追加的 `--exclude` 参数**（`pnpm test:unit --exclude X` 中 X 被 pnpm 消费，vitest 收不到）；而 **package.json 脚本本体内的 exclude 生效**（首跑中基础脚本的 desktop E2E glob 排除正常工作，1927 文件数佐证）。因此豁免必须内建于 `test:unit:ci` 脚本，禁止在 CI 里追加 CLI 参数。
-3. **vitest 位置参数过滤器可绕过 exclude**（本机实证：`pnpm test:unit:ci <文件名>` 会重新收集被豁免文件）——本地按名过滤调试时注意，这不影响 CI（无位置参数）。
+2. **豁免必须落在 vitest 配置层**：CLI `pnpm test:unit --exclude X` 的参数会被 pnpm 自身吞掉；即使绕过 pnpm 直接传给 vitest 4，在项目级 `test.exclude` 存在时 CLI `--exclude` 也不会叠加生效（CI run 38169542960 / 38171747978 两轮实证）。最终方案：`vitest.ci.config.ts` 从基线 `vitest.config.ts` 单点派生，向 unit 项目的 exclude 叠加本清单，`test:unit:ci` 以 `--config` 引用。
+3. **desktop 构建的 Gen UI vendor 校验要求 checkout 字节一致**：GH Windows runner 预置 `core.autocrlf=true` 会转换未声明换行策略的文件，已在 `.gitattributes` 将 `apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/**` 标记为 `-text`（run 38169542960 实证修复）。
+4. **vitest 位置参数过滤器可绕过 exclude**（本机实证：`pnpm test:unit:ci <文件名>` 会重新收集被豁免文件）——本地按名过滤调试时注意，这不影响 CI（无位置参数）。
 
 ## CI 豁免清单（`test:unit:ci`，共 10 文件）
 

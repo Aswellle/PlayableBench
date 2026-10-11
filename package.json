@@ -33,7 +33,7 @@
     "test:e2e:container:plugins": "bash scripts/test-desktop-e2e-container.sh plugins-verified",
     "test:coverage": "vitest run --coverage --exclude \"packages/desktop/test/e2e/**/*.test.ts\"",
     "test:unit": "vitest run --exclude \"packages/desktop/test/e2e/**/*.test.ts\"",
-    "test:unit:ci": "vitest run --exclude \"packages/desktop/test/e2e/**/*.test.ts\" --exclude \"packages/desktop/test/desktopAgentBytecode.test.ts\" --exclude \"packages/desktop/test/desktopMainIpcRemoteOpenExternalFile.test.ts\" --exclude \"packages/desktop/test/desktopMainIpcRemoteTelemetry.test.ts\" --exclude \"packages/desktop/test/subagentConfigProxy.test.ts\" --exclude \"packages/desktop/test/windowsInstallerNshSmoke.test.ts\" --exclude \"packages/provider-node/test/bundled-config-replacement.test.ts\" --exclude \"packages/services/test/skillsService.test.ts\" --exclude \"packages/zcode-server-cli/test/cli.test.ts\" --exclude \"packages/zcode-server-cli/test/daemonRegistration.test.ts\" --exclude \"packages/zcode-server-cli/test/releaseDownload.test.ts\"",
+    "test:unit:ci": "vitest run --config vitest.ci.config.ts",
     "test:unit:affected": "node scripts/run-affected-unit-tests.mjs",
     "test:docker:web-app-gateway": "node scripts/test-web-app-gateway-reset.mjs",
     "verify:pre-push": "pnpm run lint && pnpm run architecture:check -- --changed && pnpm run test:unit:affected",
