@@ -44,6 +44,19 @@
 | `packages/desktop/test/powershell-command.test.ts` | deep-equal 不匹配（代码页） | 通过 | 同上 |
 | `packages/provider/test/m2-completion-boundary.test.ts` | 30s 超时（本机实跑 114.7s） | 通过（CI runner 更快） | 慢机超时，保留观察 |
 
+## 观察项（CI 偶发，未豁免）
+
+| 测试文件 | 表现 | 归因 | 处置规则 |
+|---|---|---|---|
+| `packages/services/test/subagentRuntimeConfigWatcher.test.ts` | CI run 43073576994 首次执行失败（大小写改名后旧缓存条目清理断言），`gh run rerun --failed` 重跑通过；本地连跑 3/3 通过 | 文件监听（case-only rename）对 CI IO 时序敏感，六轮全量运行中首次出现 | 暂不豁免（保持覆盖）；再次复现即移入 CI 豁免清单并归因 |
+
+## CI 最终状态（run 43073576994，重跑后）
+
+- quality（typecheck·lint·architecture）：**PASS**
+- unit（windows / forks 池 / 1918 文件 / 18039 用例）：**PASS**
+- build（递归全仓构建）：**PASS**
+- 六轮迭代与根因全部记录于 `docs/phase1/WP2-completion-report.md` §3。
+
 ## 更新规则
 
 - 修改 `package.json` 的 `test:unit:ci` 豁免必须同步本清单（含归因与处置计划）。
