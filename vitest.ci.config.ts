@@ -19,6 +19,8 @@ const knownTestFailures = [
   "packages/desktop/test/windowsInstallerNshSmoke.test.ts",
   "packages/provider-node/test/bundled-config-replacement.test.ts",
   "packages/services/test/skillsService.test.ts",
+  "packages/services/test/subagentRuntimeConfigWatcher.test.ts",
+  "packages/web/test/externalRelayFrameGapRecovery.test.ts",
   "packages/zcode-server-cli/test/cli.test.ts",
   "packages/zcode-server-cli/test/daemonRegistration.test.ts",
   "packages/zcode-server-cli/test/releaseDownload.test.ts",

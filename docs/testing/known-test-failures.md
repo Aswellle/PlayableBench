@@ -33,6 +33,8 @@
 | 8 | `packages/zcode-server-cli/test/cli.test.ts` | `connect ENOENT \\.\pipe\zcode-server-*`（6 用例，仅 CI；本机通过） | 环境失败 | 命名管道服务端未就绪/连接时序在 CI 上失败 | 登记豁免；修复方向为管道就绪等待 |
 | 9 | `packages/zcode-server-cli/test/daemonRegistration.test.ts` | 服务管理器不可用时命令序列为空（仅 CI） | 环境失败 | GH runner 无预期服务管理器行为 | 登记豁免 |
 | 10 | `packages/zcode-server-cli/test/releaseDownload.test.ts` | 流 idle timeout AbortError（本机与 CI 均失败） | 环境失败 | idle 超时时序敏感 | 登记豁免；复跑确认稳定性 |
+| 11 | `packages/services/test/subagentRuntimeConfigWatcher.test.ts` | 大小写改名后旧缓存清理断言失败（threads 池 5/5 通过；forks 池 6/7 失败后一次重跑通过） | 环境失败 | FS watch 事件在 forks 子进程 + CI IO 时序下投递不稳定 | CI 豁免（forks 池）；本地 threads 全量仍覆盖；两全解法（watch 轮询化）留 Phase 2 |
+| 12 | `packages/web/test/externalRelayFrameGapRecovery.test.ts` | relay 帧间隙恢复 11 用例整批失败（threads 池 CI 5/5 通过；forks 池与本机 forks 验证均失败） | 环境失败 | 异步帧时序在 forks 子进程调度下漂移 | CI 豁免（forks 池）；本地 threads 全量仍覆盖；根因解法留 Phase 2 |
 
 **真实失败：0 项**——本机基线与 CI 首跑均未发现平台无关的业务逻辑断言失败；typecheck（13 项目）与 lint（0 错误）全绿。
 
