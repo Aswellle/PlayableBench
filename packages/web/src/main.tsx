@@ -68,6 +68,7 @@ import type {
   UserInfo,
 } from "@zcode/shared";
 import {
+  isWebRemoteControlQrExpired,
   matchesWebRemoteControlRoutePath,
   parseWebRemoteControlExternalQrParams,
   resolveWebRemoteControlFailureReasonFromCloseCode,
@@ -672,6 +673,8 @@ function createWebPlatform(options?: {
       Promise.reject(new Error("Web remote control can only be started from desktop")),
     refreshWebRemoteControlPairing: () =>
       Promise.reject(new Error("Web remote control pairing can only be refreshed from desktop")),
+    revokeWebRemoteControlPairing: () =>
+      Promise.reject(new Error("Web remote control pairing can only be revoked from desktop")),
     stopWebRemoteControl: () => Promise.resolve(),
     getWebRemoteControlStatus: () =>
       Promise.resolve<WebRemoteControlStatus>({
@@ -1467,6 +1470,18 @@ async function bootstrapExternalRelayWebRemoteControl(params: URLSearchParams): 
       toWebRemoteControlFailure(
         "invalid-mobile-connection",
         "Missing or invalid Web remote control relay parameters.",
+      ),
+    );
+    return;
+  }
+
+  // 修复依据（安全审计 SR-01）：桌面端展示的二维码只在短时限内可用于首次配对。
+  // 手机端提前拦截过期二维码，给出明确指引，而不是让 relay 握手失败后再排查。
+  if (isWebRemoteControlQrExpired(relayParams.timestamp, Date.now())) {
+    renderWebRemoteControlFailure(
+      toWebRemoteControlFailure(
+        "session-expired",
+        "This pairing QR code has expired. Generate a new QR code on the desktop and scan again.",
       ),
     );
     return;

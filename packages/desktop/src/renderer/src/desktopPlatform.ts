@@ -33,6 +33,8 @@ export function createDesktopPlatform(options: {
     startWebRemoteControl: (context) => window.zcode.startWebRemoteControl(context),
     refreshWebRemoteControlPairing: (context) =>
       window.zcode.refreshWebRemoteControlPairing(context),
+    revokeWebRemoteControlPairing: (context) =>
+      window.zcode.revokeWebRemoteControlPairing(context),
     stopWebRemoteControl: () => window.zcode.stopWebRemoteControl(),
     getWebRemoteControlStatus: () => window.zcode.getWebRemoteControlStatus(),
     onWebRemoteControlStatusChanged: (handler) =>

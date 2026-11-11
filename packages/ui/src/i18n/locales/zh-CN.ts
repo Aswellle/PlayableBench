@@ -1892,6 +1892,12 @@ const zhCN: Record<string, string> = {
     "刷新后，之前复制或扫码得到的远程控制链接将失效，已连接的手机需要重新扫码。",
   "webRemoteControl.refreshQr.success": "已刷新远程控制二维码",
   "webRemoteControl.refreshQr.failed": "刷新远程控制二维码失败：{error}",
+  "webRemoteControl.revoke": "撤销配对",
+  "webRemoteControl.revoke.confirmTitle": "撤销 Web 远程控制配对？",
+  "webRemoteControl.revoke.confirmDescription":
+    "撤销会立即断开已连接的手机，并作废当前配对凭证；旧二维码和已复制的链接全部失效，重新启用需要重新扫码配对。",
+  "webRemoteControl.revoke.success": "已撤销 Web 远程控制配对",
+  "webRemoteControl.revoke.failed": "撤销 Web 远程控制配对失败：{error}",
   "webRemoteControl.stop": "停止",
   "webRemoteControl.switchWorkspace": "切换工作区",
   "webRemoteControl.expandNavigation": "展开任务和工作区",

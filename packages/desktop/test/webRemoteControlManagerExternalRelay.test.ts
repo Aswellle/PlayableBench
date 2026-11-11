@@ -6,7 +6,13 @@ import type {
   WebRemoteControlTaskTarget,
   WebRemoteControlWorkspaceTarget,
 } from "@zcode/shared";
-import { buildZCodeEndpointUrls, encodeWebRemoteControlRpcTransportMessage } from "@zcode/shared";
+import {
+  buildZCodeEndpointUrls,
+  encodeWebRemoteControlRpcTransportMessage,
+  isWebRemoteControlQrExpired,
+  WEB_REMOTE_CONTROL_QR_TTL_MS,
+  WEB_REMOTE_CONTROL_QR_TTL_SKEW_MS,
+} from "@zcode/shared";
 import { createWebRemoteControlManager } from "../src/main/webRemoteControlManager.js";
 import { createWebRemoteControlFeatureGate } from "../src/main/webRemoteControlFeatureGate.js";
 
@@ -198,6 +204,7 @@ function createManagerHarness(options?: {
     getStoredAuth: () => storedAuth,
     getStartupRestoreContext: () => startupRestoreContext,
     getLatestTransportOptions: () => latestTransportOptions,
+    transportStartCount: () => transportStartCount,
     deliverPayload: (payload: WebRemoteControlAppPayload) => {
       if (!deliverPayload) {
         throw new Error("transport not started");
@@ -1742,5 +1749,110 @@ describe("createWebRemoteControlManager external relay", () => {
       "remote-session-1",
       "remote-closed",
     );
+  });
+});
+
+describe("web remote control pairing security (QR TTL / revoke)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("首次配对超出二维码 TTL 时作废凭证并拒绝配对", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const { emitTransportState, manager, getStoredAuth, reportRemoteUsageEvent } =
+      createManagerHarness({
+        storedAuth: { deviceSid: "sid-old", passHash: "hash-old" },
+      });
+
+    await manager.start(1, { workspacePath: localWorkspace.workspacePath });
+    // 二维码在 start 时生成；把时钟推进到 TTL + 余量之外再完成首次配对。
+    vi.setSystemTime(new Date("2026-01-01T00:10:00Z"));
+    emitTransportState("paired");
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(getStoredAuth()).toBeUndefined();
+    expect(manager.getStatus(1)).toMatchObject({
+      status: "error",
+      failure: { reason: "session-expired" },
+    });
+    expect(reportRemoteUsageEvent).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        eventExtraDetail: expect.objectContaining({
+          result: "failure",
+          pair_kind: "initial",
+        }),
+      }),
+    );
+  });
+
+  it("TTL 内完成首次配对不受影响", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const { emitTransportState, manager, getStoredAuth } = createManagerHarness({
+      storedAuth: { deviceSid: "sid-old", passHash: "hash-old" },
+    });
+
+    await manager.start(1, { workspacePath: localWorkspace.workspacePath });
+    vi.setSystemTime(new Date("2026-01-01T00:03:00Z"));
+    emitTransportState("paired");
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(getStoredAuth()).toMatchObject({ deviceSid: "sid-old" });
+    expect(manager.getStatus(1)).toMatchObject({
+      status: "active",
+      mobileConnected: true,
+    });
+  });
+
+  it("已配对会话的后续重连不受二维码 TTL 限制", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const { emitTransportState, manager, getStoredAuth } = createManagerHarness({
+      storedAuth: { deviceSid: "sid-old", passHash: "hash-old" },
+    });
+
+    await manager.start(1, { workspacePath: localWorkspace.workspacePath });
+    emitTransportState("paired");
+    vi.setSystemTime(new Date("2026-01-01T02:00:00Z"));
+    emitTransportState("connecting");
+    emitTransportState("paired");
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(getStoredAuth()).toMatchObject({ deviceSid: "sid-old" });
+    expect(manager.getStatus(1)).toMatchObject({ status: "active" });
+  });
+
+  it("撤销配对断开连接、作废凭证且不自动重新配对", async () => {
+    const { manager, getStoredAuth, transportStartCount } = createManagerHarness({
+      storedAuth: { deviceSid: "sid-old", passHash: "hash-old" },
+    });
+
+    const authorization = manager.authorizeStart(1, {
+      workspacePath: localWorkspace.workspacePath,
+    });
+    await manager.startAuthorized(1, { workspacePath: localWorkspace.workspacePath }, authorization);
+    const startCountAfterStart = transportStartCount();
+
+    const status = await manager.revokePairingAuthorized(
+      1,
+      { workspacePath: localWorkspace.workspacePath },
+      manager.authorizeStart(1, { workspacePath: localWorkspace.workspacePath }),
+    );
+
+    expect(status).toMatchObject({ status: "idle" });
+    expect(getStoredAuth()).toBeUndefined();
+    expect(manager.getStatus(1)).toMatchObject({ status: "idle" });
+    expect(transportStartCount()).toBe(startCountAfterStart);
+  });
+
+  it("isWebRemoteControlQrExpired 覆盖 TTL 与边界", () => {
+    const t0 = 1_000_000;
+    const ttlWithSkew = WEB_REMOTE_CONTROL_QR_TTL_MS + WEB_REMOTE_CONTROL_QR_TTL_SKEW_MS;
+    expect(isWebRemoteControlQrExpired(t0, t0)).toBe(false);
+    expect(isWebRemoteControlQrExpired(t0, t0 + ttlWithSkew)).toBe(false);
+    expect(isWebRemoteControlQrExpired(t0, t0 + ttlWithSkew + 1)).toBe(true);
+    expect(isWebRemoteControlQrExpired(Number.NaN, t0)).toBe(true);
   });
 });
