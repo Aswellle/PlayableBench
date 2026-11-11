@@ -60,6 +60,7 @@ import {
   getConversationWorkspaceDir,
   getDataBaseDir,
   getZCodeDataRootDir,
+  migrateLegacyCredentialEntries,
   normalizeRuntimeProcessEnv,
   setDataBaseDir,
 } from "@zcode/services/node";
@@ -84,6 +85,8 @@ import {
   HostMessageTypes,
 } from "@zcode/shared";
 import { logger, webRemoteControlRelayLogger } from "./logger.js";
+import { createDesktopCredentialCipherProvider } from "./credentialSafeStorageBridge.js";
+import { WEB_REMOTE_CONTROL_EXTERNAL_RELAY_PASS_HASH_CREDENTIAL_KEY } from "./webRemoteControlRelayAuthStorageProvider.js";
 import { markMainLaunchAppReady } from "./desktopLaunchMarks.js";
 import { createCuaPipFocusRouter, resolveCuaPipWindowKey } from "./cuaPipFocusRouter.js";
 import { createDesktopTelemetryFetch } from "./desktopTelemetryFetch.js";
@@ -706,10 +709,36 @@ const UPDATE_STATUS_WINDOW_PROGRESS_HEIGHT = 224;
 const UPDATE_STATUS_WINDOW_READY_HEIGHT = UPDATE_STATUS_WINDOW_PROGRESS_HEIGHT - 54;
 const UPDATE_STATUS_WINDOW_TRAFFIC_LIGHT_POSITION = { x: 10, y: 10 } as const;
 const mainSettingService = createSettingService();
-const webRemoteControlCredentialService = createCredentialService();
+// 安全审计 SR-03：main 进程独占的凭据键（Web 远控配对凭证）改用 OS 级
+// safeStorage 加密（enc:v2:）；与 Host/CLI 共享的 oauth:* 键保持 v1，
+// 避免 Host/CLI 无法解密，完整覆盖待 Main↔Host 加密桥落地后再评估。
+const webRemoteControlCipherProvider = createDesktopCredentialCipherProvider();
+const webRemoteControlCredentialService = createCredentialService({
+  cipherProvider: webRemoteControlCipherProvider,
+});
 const appLaunchGate = createAppLaunchGate();
 const appLaunchCoordinator = createAppLaunchCoordinator(appLaunchGate);
 const appTelemetryCredentialService = createCredentialService();
+// 把 Web 远控配对凭证从 v1 迁移到 OS 级加密；只迁移 main 独占键。
+void migrateLegacyCredentialEntries({
+  keys: [WEB_REMOTE_CONTROL_EXTERNAL_RELAY_PASS_HASH_CREDENTIAL_KEY],
+  cipherProvider: webRemoteControlCipherProvider,
+}).then((result) => {
+  if (result.migrated.length > 0) {
+    logger.info("[credential] migrated legacy entries to OS secure storage", {
+      count: result.migrated.length,
+    });
+  }
+  for (const skip of result.skipped) {
+    if (skip.reason !== "missing" && skip.reason !== "already-migrated") {
+      logger.warn("[credential] legacy entry migration skipped", { key: skip.key, reason: skip.reason });
+    }
+  }
+}).catch((error: unknown) => {
+  logger.warn("[credential] legacy entry migration failed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+});
 async function resolveCurrentZCodeEndpointOrigin() {
   return resolveZCodeEndpointOrigin({
     env: ZCODE_ENV,

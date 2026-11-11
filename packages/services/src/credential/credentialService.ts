@@ -12,6 +12,7 @@ import {
   createCredentialCipherProvider,
   type CredentialCipherProvider,
 } from "./providers/credentialCipherProvider.js";
+import { isLegacyEncryptedCredentialValue } from "./providers/credentialVersionedCipherProvider.js";
 import { createServiceLogger } from "../logger/serviceLogger.js";
 import { getAppConfigDir } from "../paths.js";
 
@@ -127,4 +128,51 @@ export function createCredentialService(
       dependencies.onDidMutate?.({ operation: "delete", key: validatedKey });
     },
   };
+}
+
+export interface LegacyCredentialMigrationResult {
+  migrated: string[];
+  /** 解密失败或已是目标格式的键；失败项保留原值，不阻断其余迁移。 */
+  skipped: Array<{ key: string; reason: string }>;
+}
+
+/**
+ * 一次性把指定键从旧加密格式重加密为 cipherProvider 当前的目标格式
+ * （安全审计 SR-03：桌面 main 进程用 safeStorage 版本化加密器把仅本进程
+ * 使用的键迁移到 enc:v2:）。只处理显式传入的键，避免把跨进程共享键
+ * （oauth:* 等，Host/CLI 仍用 v1 读取）迁移成宿主无法解密的格式。
+ * 迁移在文件锁内整体读改写，任何键解密失败都会跳过并保留原值。
+ */
+export async function migrateLegacyCredentialEntries(options: {
+  keys: string[];
+  cipherProvider: CredentialCipherProvider;
+}): Promise<LegacyCredentialMigrationResult> {
+  const result: LegacyCredentialMigrationResult = { migrated: [], skipped: [] };
+  const credentialsFile = getCredentialsFile();
+  await withFileLock(credentialsFile, async () => {
+    const creds = await readAll(credentialsFile);
+    let changed = false;
+    for (const key of options.keys) {
+      const rawValue = creds[key];
+      if (rawValue === undefined || !isLegacyEncryptedCredentialValue(rawValue)) {
+        result.skipped.push({ key, reason: rawValue === undefined ? "missing" : "already-migrated" });
+        continue;
+      }
+      try {
+        const plaintext = options.cipherProvider.decrypt(rawValue);
+        creds[key] = options.cipherProvider.encrypt(plaintext);
+        changed = true;
+        result.migrated.push(key);
+      } catch (error) {
+        result.skipped.push({
+          key,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (changed) {
+      await writeAll(credentialsFile, creds);
+    }
+  });
+  return result;
 }
