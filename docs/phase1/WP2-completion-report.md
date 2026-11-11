@@ -39,7 +39,7 @@
 
 ## 3. CI 运行结果（真实执行记录）
 
-最终状态：**run `43073576994`（重跑后）三 job 全绿**——quality（typecheck·lint·architecture）✅、unit（windows / forks 池 / 1918 文件 / 18039 用例）✅、build（递归全仓）✅。工作分支 `phase1/wp2-ci-workflow`（HEAD `55b9dd2c`）。
+最终状态：**run `43108624641`（八轮联调后）三 job 全绿，且该轮已包含 Phase 1 全部工作包（WP3 远控安全 / WP4 凭据存储 / WP5 性能基线）**——quality（typecheck·lint·architecture）✅、unit（windows / forks 池 / 1920 文件 / 18053 用例）✅、build（递归全仓）✅。工作分支 `phase1/wp2-ci-workflow`。
 
 六轮迭代实录（每轮失败均定位到根因并修复）：
 
@@ -50,7 +50,9 @@
 | 3 | `38171747978` | unit ❌（16 失败） | 豁免清单内文件照跑：vitest 4 在项目级 `test.exclude` 存在时 CLI `--exclude` 不叠加生效（e2e 排除来自配置所以一直有效）→ 新建 `vitest.ci.config.ts` 从基线配置单点派生叠加豁免，`test:unit:ci` 改 `--config` 引用 |
 | 4 | `38179220502` | unit ❌（0 用例失败） | 17926 用例全过后 threads worker 收尾堆 OOM（ERR_WORKER_OUT_OF_MEMORY）→ NODE_OPTIONS=6144 |
 | 5 | `38181939996` | unit ❌（2 失败+OOM） | NODE_OPTIONS 对 worker_threads 堆上限不生效 → 切换仓库自带 `ZCODE_TEST_POOL=forks` 进程隔离 |
-| 6 | `43073576994` | unit ❌ 1 项 → **重跑全绿** | `subagentRuntimeConfigWatcher` 大小写改名 watcher 偶发（本地 3/3 通过、重跑通过）→ 登记为 known-test-failures 观察项，未豁免 |
+| 6 | `43073576994` | unit ❌ 1 项 → 重跑全绿（threads→forks 后首个全绿，仅含 CI 修复） | `subagentRuntimeConfigWatcher` 大小写改名 watcher 偶发（本地 3/3 通过、重跑通过）→ 登记为 known-test-failures 观察项，未豁免 |
+| 7 | `43102606283` / PR 同步 `43102616913` | unit ❌ 12 失败 | forks 池下两个异步时序测试转败：`externalRelayFrameGapRecovery`（11 用例整批，threads 池 CI 5/5 过）与 `subagentRuntimeConfigWatcher` 复现 → threads OOM 与 forks 时序二选一的僵局，按环境敏感处置 |
+| 8 | `43108624641` | **三 job 全绿（含 WP3/4/5 全部内容）** | 上述两测试纳入 CI 豁免（本地 threads 全量仍覆盖），两全解法（watch 轮询化/worker 内存可配）登记 Phase 2 |
 
 **本地等价验证**（每轮修复后）：`pnpm build` exit 0（15.2 min）；`pnpm test:unit:ci` 1918 文件 = 1928-10 精确豁免，余 5 失败均为已登记本机项/本机网络时序项。
 

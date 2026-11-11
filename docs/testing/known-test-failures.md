@@ -52,12 +52,12 @@
 |---|---|---|---|
 | `packages/services/test/subagentRuntimeConfigWatcher.test.ts` | CI run 43073576994 首次执行失败（大小写改名后旧缓存条目清理断言），`gh run rerun --failed` 重跑通过；本地连跑 3/3 通过 | 文件监听（case-only rename）对 CI IO 时序敏感，六轮全量运行中首次出现 | 暂不豁免（保持覆盖）；再次复现即移入 CI 豁免清单并归因 |
 
-## CI 最终状态（run 43073576994，重跑后）
+## CI 最终状态（run `43108624641`，commit `6dc8110e`）
 
 - quality（typecheck·lint·architecture）：**PASS**
-- unit（windows / forks 池 / 1918 文件 / 18039 用例）：**PASS**
+- unit（windows / forks 池 / 1920 文件 / 18053 用例，含 12 文件豁免）：**PASS**
 - build（递归全仓构建）：**PASS**
-- 六轮迭代与根因全部记录于 `docs/phase1/WP2-completion-report.md` §3。
+- 八轮迭代与根因全部记录于 `docs/phase1/WP2-completion-report.md` §3；Phase 1 完成报告见 `docs/phase1/PHASE-01-REPORT.md`。
 
 ## 更新规则
 
