@@ -1918,6 +1918,8 @@ const zhCN: Record<string, string> = {
   "playablebench.refresh": "刷新",
   "playablebench.loading": "加载中……",
   "playablebench.unsupportedHost": "当前宿主不提供个人工作管理服务（远端会话不可用）。",
+  "settings.telemetryEnabled": "产品遥测与诊断",
+  "settings.telemetryEnabledDescription": "关闭后产品埋点与崩溃/性能诊断（ARMS）不再上报；与本机功能运行无关。",
   "webRemoteControl.revoke": "撤销配对",
   "webRemoteControl.revoke.confirmTitle": "撤销 Web 远程控制配对？",
   "webRemoteControl.revoke.confirmDescription":

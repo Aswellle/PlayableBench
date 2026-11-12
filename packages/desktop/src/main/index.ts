@@ -5,7 +5,7 @@ import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
 import { powerMonitor, powerSaveBlocker } from "electron";
 import { crashCapturePaths } from "./appCrashCaptureBootstrap.js";
-import { armsInitPromise } from "./appARMSBootstrap.js";
+import { getArmsInitPromise } from "./appARMSBootstrap.js";
 import {
   onLocalDatabaseStartupReady,
   configureDatabaseStartupQuit,
@@ -792,7 +792,16 @@ function awaitFirstHostSpawnDecision(): Promise<void> {
   })();
   return firstHostSpawnDecisionPromise;
 }
+// 安全审计 SR-07：产品埋点受用户设置 telemetryEnabled 控制（缺省启用，fail-open）。
+async function isProductTelemetryEnabled(): Promise<boolean> {
+  try {
+    return (await mainSettingService.get()).telemetryEnabled !== false;
+  } catch {
+    return true;
+  }
+}
 const appTelemetryCore = createTelemetryCore({
+  isTelemetryEnabled: isProductTelemetryEnabled,
   loadUserId: createTelemetryUserIdLoader(appTelemetryCredentialService),
   loadAuthorization: createTelemetryAuthorizationLoader(appTelemetryCredentialService),
   loadMarketingParams: createTelemetryMarketingParamsLoader(appTelemetryCredentialService),
@@ -2495,8 +2504,9 @@ app.whenReady().then(async () => {
     listSSHConfigAliases,
   });
 
-  // 等待 ARMS 完成 init（含渲染进程注入监听），避免首窗 dom-ready 早于 SDK 注册导致无上报
-  await armsInitPromise;
+  // 等待 ARMS 完成 init（含渲染进程注入监听），避免首窗 dom-ready 早于 SDK 注册导致无上报。
+  // SR-07：用户关闭遥测时跳过 ARMS init（崩溃/性能采集同受 telemetryEnabled 约束）。
+  await getArmsInitPromise({ enabled: await isProductTelemetryEnabled() });
 
   // ARMS init 完成后首次写入 user.name（落 device_mid）
   void armsUserIdentitySync.refresh();

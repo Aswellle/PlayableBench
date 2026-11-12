@@ -56,6 +56,8 @@ export function GeneralSectionContent({
   keepAwakeWhileRunning = false,
   desktopChromiumHardwareAccelerationEnabled = true,
   receivePreviewUpdates,
+  telemetryEnabled,
+  onTelemetryEnabledChange,
   autoDownloadAndInstallUpdates,
   dataBaseDir,
   terminalInheritSystemProfile = true,
@@ -120,6 +122,9 @@ export function GeneralSectionContent({
   keepAwakeWhileRunning?: boolean;
   desktopChromiumHardwareAccelerationEnabled?: boolean;
   receivePreviewUpdates: boolean;
+  /** 遥测 opt-out（SR-07）：缺省启用。 */
+  telemetryEnabled: boolean;
+  onTelemetryEnabledChange: (enabled: boolean) => Promise<void>;
   autoDownloadAndInstallUpdates: boolean;
   dataBaseDir: string;
   terminalInheritSystemProfile: boolean;
@@ -599,6 +604,21 @@ export function GeneralSectionContent({
                   checked={receivePreviewUpdates}
                   onCheckedChange={(checked) => {
                     void onReceivePreviewUpdatesChange(checked);
+                  }}
+                />
+              }
+            />
+            <SettingsRow
+              label={intl.formatMessage({ id: "settings.telemetryEnabled" })}
+              description={intl.formatMessage({
+                id: "settings.telemetryEnabledDescription",
+              })}
+              control={
+                <Switch
+                  aria-label={intl.formatMessage({ id: "settings.telemetryEnabled" })}
+                  checked={telemetryEnabled}
+                  onCheckedChange={(checked) => {
+                    void onTelemetryEnabledChange(checked);
                   }}
                 />
               }

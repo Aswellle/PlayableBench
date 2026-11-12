@@ -2053,6 +2053,8 @@ const enUS: Record<string, string> = {
   "playablebench.refresh": "Refresh",
   "playablebench.loading": "Loading……",
   "playablebench.unsupportedHost": "Personal workspace service is unavailable on this host (remote sessions).",
+  "settings.telemetryEnabled": "Product telemetry & diagnostics",
+  "settings.telemetryEnabledDescription": "When off, product analytics and crash/performance diagnostics (ARMS) are not reported; local functionality is unaffected.",
   "webRemoteControl.revoke": "Revoke pairing",
   "webRemoteControl.revoke.confirmTitle": "Revoke Web remote control pairing?",
   "webRemoteControl.revoke.confirmDescription":

@@ -252,6 +252,11 @@ export interface ResourceUsageSnapshot {
 export interface AppSettings {
   /** 当前 App/Host 不再显示提交前体验套餐推荐；不改变任何入口的模型选择。 */
   startPlanRecommendationDismissed?: boolean;
+  /**
+   * 产品埋点/诊断遥测总开关（安全审计 SR-07）。缺省视为启用（保持既有行为），
+   * 设置页可显式关闭；关闭后产品埋点不再上报。ARMS RUM 崩溃/性能采集同受此开关约束。
+   */
+  telemetryEnabled?: boolean;
   recentProjects: string[]; // 最近项目列表，最多保留 10 个
   locale: Locale; // 界面语言
   /**
