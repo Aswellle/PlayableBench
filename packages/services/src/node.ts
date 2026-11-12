@@ -105,6 +105,11 @@ export {
   createSettingServiceWithMigrations,
 } from "./setting/settingService.js";
 export { createCredentialService } from "./credential/credentialService.js";
+export { migrateLegacyCredentialEntries } from "./credential/credentialService.js";
+export {
+  createVersionedCredentialCipherProvider,
+  type HostCredentialCipherBridge,
+} from "./credential/providers/credentialVersionedCipherProvider.js";
 export { createBroadcastService } from "./broadcast/broadcastService.js";
 export { createZCodeAgentService } from "./zcode-agent/zcodeAgentService.js";
 export { createZCodeTaskServiceAdapter } from "./zcode-agent/zcodeTaskServiceAdapter.js";

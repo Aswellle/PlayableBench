@@ -13,6 +13,7 @@ import {
   buildWebRemoteControlBridgeResultTelemetry,
   buildWebRemoteControlPairResultTelemetry,
   classifyRemoteUsageError,
+  isWebRemoteControlQrExpired,
   parseRemoteWorkspaceIdentity,
   WEB_REMOTE_CONTROL_OUTBOUND_PAYLOAD_BUFFER_TIMEOUT_MS,
   type ZCodeEndpointUrls,
@@ -117,6 +118,8 @@ interface WindowControlRuntime {
   deviceMid: string;
   connectUrl: string;
   qrUrl: string;
+  /** 本次展示二维码的生成时刻；首次配对时据此执行 QR TTL 过期校验（安全审计 SR-01）。 */
+  qrGeneratedAt?: number;
   transport: WebRemoteControlDeviceTransportLike;
   mobileConnected: boolean;
   hasEverPaired: boolean;
@@ -278,7 +281,7 @@ function toExternalBridge(
 async function resetExternalRelayDeviceAuth(
   authStorageProvider: WebRemoteControlRelayAuthStorageProvider,
   logger: WebRemoteControlManagerDependencies["logger"],
-  reason: "manual" | "auth-failed" | "device-not-found" | "leaked-qr",
+  reason: "manual" | "auth-failed" | "device-not-found" | "leaked-qr" | "qr-expired",
 ): Promise<void> {
   await authStorageProvider.clear();
   logger.info("[web-remote-control] external relay auth reset", { reason });
@@ -1232,6 +1235,42 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       return;
     }
     if (state === "paired") {
+      if (
+        previousTransportState !== "paired" &&
+        !runtime.hasEverPaired &&
+        isWebRemoteControlQrExpired(runtime.qrGeneratedAt ?? Number.NaN, Date.now())
+      ) {
+        // 修复依据（安全审计 SR-01）：首次配对超出二维码 TTL，说明这组配对凭证
+        // 已超出可信窗口（截图/历史链接仍可能落在他人手里）。这里作废凭证并
+        // 拒绝本次配对，用户重新开启远控即可获得全新凭证与二维码。
+        void resetExternalRelayDeviceAuth(dependencies.authStorageProvider, dependencies.logger, "qr-expired").catch(
+          (error: unknown) => {
+            dependencies.logger.warn("[web-remote-control] expired QR auth cleanup failed", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        );
+        const expiredDimensions = resolveRuntimeWorkspaceDimensions(runtime);
+        reportRemoteUsageEvent(
+          runtime.windowId,
+          buildWebRemoteControlPairResultTelemetry({
+            result: "failure",
+            pairKind: "initial",
+            ...expiredDimensions,
+            errorCategory: "relay",
+          }),
+        );
+        preserveWindowRuntimeFailure(
+          runtime.windowId,
+          runtime,
+          "session-expired",
+          createFailure(
+            "session-expired",
+            "Web remote control pairing QR has expired; restart remote control to generate a fresh QR code.",
+          ),
+        );
+        return;
+      }
       if (previousTransportState !== "paired") {
         const workspaceDimensions = resolveRuntimeWorkspaceDimensions(runtime);
         reportRemoteUsageEvent(
@@ -1293,15 +1332,19 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
   }
 
   function createQrUrl(
+    runtime: { qrGeneratedAt?: number },
     auth: { deviceSid: string; passHash: string },
     mobileRemoteControlUrl: string,
     theme?: WebRemoteControlContext["theme"],
   ): string {
+    // 记录二维码生成时刻，供首次配对时的 QR TTL 过期校验使用（安全审计 SR-01）。
+    const timestamp = Date.now();
+    runtime.qrGeneratedAt = timestamp;
     return buildWebRemoteControlExternalQrUrl({
       baseUrl: mobileRemoteControlUrl,
       deviceSid: auth.deviceSid,
       passHash: auth.passHash,
-      timestamp: Date.now(),
+      timestamp,
       deviceMid: dependencies.deviceMid,
       deviceName: dependencies.deviceName,
       appVersion: dependencies.appVersion,
@@ -1469,7 +1512,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         throw error;
       }
 
-      const qrUrl = createQrUrl(auth, mobileRemoteControlUrl, context.theme);
+      const qrUrl = createQrUrl(runtime!, auth, mobileRemoteControlUrl, context.theme);
       runtime!.deviceSid = auth.deviceSid;
       runtime!.passHash = auth.passHash;
       runtime!.qrUrl = qrUrl;
@@ -1570,6 +1613,27 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     ): Promise<WebRemoteControlStartResult> {
       consumeStartAuthorization(windowId, context, authorization);
       return this.resetPairing(windowId, context);
+    },
+    // 修复依据（安全审计 SR-01/SR-04）：撤销配对与"刷新二维码"语义不同——撤销只
+    // 断开并作废配对材料，不自动重新配对。旧凭证随之失效，已连接手机立即掉线，
+    // 持有旧二维码/凭证的第三方无法再完成配对；重新启用需用户显式重新开启。
+    async revokePairing(windowId: number): Promise<WebRemoteControlStatus> {
+      dependencies.featureGate.assertEnabled();
+      await stopWindowRuntime(windowId, "revoked");
+      await resetExternalRelayDeviceAuth(
+        dependencies.authStorageProvider,
+        dependencies.logger,
+        "manual",
+      );
+      return { status: "idle" };
+    },
+    async revokePairingAuthorized(
+      windowId: number,
+      context: WebRemoteControlContext,
+      authorization: WebRemoteControlStartAuthorization,
+    ): Promise<WebRemoteControlStatus> {
+      consumeStartAuthorization(windowId, context, authorization);
+      return this.revokePairing(windowId);
     },
 
     getStatus(windowId: number): WebRemoteControlStatus {

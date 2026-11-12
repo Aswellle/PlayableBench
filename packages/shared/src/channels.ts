@@ -223,6 +223,8 @@ export const PlatformChannels = {
   /** 为当前 workspace 开启 Web 远程控制 */
   StartWebRemoteControl: "zcode:start-web-remote-control",
   ResetWebRemoteControlPairing: "zcode:reset-web-remote-control-pairing",
+  /** 撤销当前窗口的 Web 远程控制配对（断开并作废凭证，不自动重配） */
+  RevokeWebRemoteControlPairing: "zcode:revoke-web-remote-control-pairing",
   /** 关闭当前窗口的 Web 远程控制 */
   StopWebRemoteControl: "zcode:stop-web-remote-control",
   /** 查询当前窗口的 Web 远程控制状态 */
@@ -826,6 +828,10 @@ export interface PlatformChannelMap {
   [PlatformChannels.ResetWebRemoteControlPairing]: {
     request: WebRemoteControlContext;
     response: WebRemoteControlStartOperationResult;
+  };
+  [PlatformChannels.RevokeWebRemoteControlPairing]: {
+    request: WebRemoteControlContext;
+    response: WebRemoteControlStatus;
   };
   [PlatformChannels.StopWebRemoteControl]: {
     request: void;

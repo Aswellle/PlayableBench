@@ -333,6 +333,21 @@ export function parseWebRemoteControlExternalQrParams(
 
 export type WebRemoteControlTokenKind = "window-pairing";
 
+// 修复依据（安全审计 SR-01）：二维码 URL 携带的配对凭证（sid+hash）此前长期有效，
+// 截图/浏览器历史泄露即可在任意时刻完成首次配对。这里约束：二维码展示后必须在
+// TTL 内完成首次配对，超时后桌面端拒绝该次配对并作废当前配对材料（重新生成）。
+export const WEB_REMOTE_CONTROL_QR_TTL_MS = 5 * 60 * 1000;
+// 扫码后经 relay 完成握手有处理延迟，在 TTL 之外保留少量余量，避免临界误拒。
+export const WEB_REMOTE_CONTROL_QR_TTL_SKEW_MS = 2 * 60 * 1000;
+
+export function isWebRemoteControlQrExpired(qrTimestamp: number, nowMs: number): boolean {
+  if (!Number.isFinite(qrTimestamp)) {
+    return true;
+  }
+  return nowMs - qrTimestamp > WEB_REMOTE_CONTROL_QR_TTL_MS + WEB_REMOTE_CONTROL_QR_TTL_SKEW_MS;
+}
+
+
 export type WebRemoteControlWindowFailureReason = WebRemoteControlFailureReason;
 
 export const WebRemoteControlCloseCodes = {

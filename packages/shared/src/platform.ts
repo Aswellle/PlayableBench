@@ -747,6 +747,11 @@ export interface IPlatformService {
     context: WebRemoteControlContext,
   ): Promise<WebRemoteControlStartOperationResult>;
 
+  /** 撤销当前窗口的 Web 远程控制配对：断开连接并作废配对凭证，不自动重新配对 */
+  revokeWebRemoteControlPairing(
+    context: WebRemoteControlContext,
+  ): Promise<WebRemoteControlStatus>;
+
   /** 关闭当前窗口已开启的 Web 远程控制能力 */
   stopWebRemoteControl(): Promise<void>;
 

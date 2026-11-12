@@ -556,6 +556,54 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
     }
   };
 
+  // 修复依据（安全审计 SR-01/SR-04）：与"刷新二维码"不同，撤销会作废配对凭证且
+  // 不重新配对——已连接手机立即掉线，旧二维码即刻失效。用于用户主动收回访问权。
+  const handleRevokePairing = async () => {
+    const confirmed = await confirmDialog({
+      title: intl.formatMessage({ id: "webRemoteControl.revoke.confirmTitle" }),
+      description: intl.formatMessage({
+        id: "webRemoteControl.revoke.confirmDescription",
+      }),
+      confirmLabel: intl.formatMessage({ id: "webRemoteControl.revoke" }),
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const nextStatus = await platform.revokeWebRemoteControlPairing({
+        workspacePath,
+        workspaceIdentity,
+        remoteSessionId,
+        initialTaskId,
+      });
+      setStatus(nextStatus);
+      toast(intl.formatMessage({ id: "webRemoteControl.revoke.success" }));
+      logger.info("[WebRemoteControlDialog] 已撤销 Web 远程控制配对", {
+        workspacePath,
+        workspaceIdentity: workspaceIdentity ?? "none",
+        remoteSessionId: remoteSessionId ?? "none",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast(
+        intl.formatMessage(
+          { id: "webRemoteControl.revoke.failed" },
+          { error: message },
+        ),
+      );
+      logger.error("[WebRemoteControlDialog] 撤销 Web 远程控制配对失败", {
+        workspacePath,
+        workspaceIdentity: workspaceIdentity ?? "none",
+        remoteSessionId: remoteSessionId ?? "none",
+        error: message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStop = async () => {
     setLoading(true);
     try {
@@ -768,6 +816,17 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                     >
                       <CopyIcon className="size-3.5" />
                       {intl.formatMessage({ id: "webRemoteControl.copyLink" })}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      className="shrink-0 gap-2 text-destructive enabled:cursor-pointer hover:text-destructive"
+                      onClick={() => void handleRevokePairing()}
+                      disabled={loading}
+                    >
+                      <Unplug className="size-3.5" />
+                      {intl.formatMessage({ id: "webRemoteControl.revoke" })}
                     </Button>
                   </div>
                 </div>

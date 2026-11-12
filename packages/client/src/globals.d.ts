@@ -103,6 +103,10 @@ declare global {
       refreshWebRemoteControlPairing(
         context: WebRemoteControlContext,
       ): Promise<WebRemoteControlStartOperationResult>;
+      /** 撤销当前窗口的 Web 远程控制配对（断开并作废凭证，不自动重配） */
+      revokeWebRemoteControlPairing(
+        context: WebRemoteControlContext,
+      ): Promise<WebRemoteControlStatus>;
       /** 关闭当前窗口的 Web 远程控制 */
       stopWebRemoteControl(): Promise<void>;
       /** 查询当前窗口 Web 远程控制状态 */

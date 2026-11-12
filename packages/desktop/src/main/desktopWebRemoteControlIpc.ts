@@ -27,6 +27,11 @@ export interface WebRemoteControlIpcManager {
     context: WebRemoteControlContext,
     authorization: WebRemoteControlStartAuthorization,
   ) => Promise<WebRemoteControlStartResult>;
+  revokePairingAuthorized: (
+    windowId: number,
+    context: WebRemoteControlContext,
+    authorization: WebRemoteControlStartAuthorization,
+  ) => Promise<WebRemoteControlStatus>;
   stop(windowId: number): Promise<void>;
   getStatus(windowId: number): WebRemoteControlStatus;
 }
@@ -131,6 +136,19 @@ export function registerWebRemoteControlIpcHandlers(
         },
         reportRemoteUsageEvent: dependencies.reportRemoteUsageEvent,
       }),
+  );
+
+  ipcMain.handle(
+    PlatformChannels.RevokeWebRemoteControlPairing,
+    async (event, context: WebRemoteControlContext) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) {
+        throw new Error("未找到当前窗口，无法撤销 Web 远程控制配对");
+      }
+      const manager = dependencies.webRemoteControlManager;
+      const authorization = manager.authorizeStart(win.id, context);
+      return manager.revokePairingAuthorized(win.id, context, authorization);
+    },
   );
 
   ipcMain.handle(PlatformChannels.StopWebRemoteControl, async (event) => {

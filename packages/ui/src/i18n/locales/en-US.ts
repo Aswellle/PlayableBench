@@ -2027,6 +2027,12 @@ const enUS: Record<string, string> = {
     "Refreshing will invalidate any remote control links that were copied or scanned before. Connected phones will need to scan the new QR code.",
   "webRemoteControl.refreshQr.success": "Remote control QR refreshed",
   "webRemoteControl.refreshQr.failed": "Could not refresh remote control QR: {error}",
+  "webRemoteControl.revoke": "Revoke pairing",
+  "webRemoteControl.revoke.confirmTitle": "Revoke Web remote control pairing?",
+  "webRemoteControl.revoke.confirmDescription":
+    "Revoking immediately disconnects the connected phone and invalidates the current pairing credential. Old QR codes and copied links stop working; you must scan a new QR code to enable remote control again.",
+  "webRemoteControl.revoke.success": "Web remote control pairing revoked",
+  "webRemoteControl.revoke.failed": "Could not revoke Web remote control pairing: {error}",
   "webRemoteControl.stop": "Stop",
   "webRemoteControl.switchWorkspace": "Switch workspace",
   "webRemoteControl.expandNavigation": "Expand tasks and workspaces",

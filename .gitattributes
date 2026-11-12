@@ -14,3 +14,9 @@ third-party/runtime/*.txt -text -whitespace
 docs/knip/docs/LICENSE -text -whitespace
 docs/knip/docs/licenses/** -text -whitespace
 third-party/inventory.json linguist-generated=true
+
+# Gen UI vendored 前端资产带 manifest sha256 字节校验（desktop 构建门禁），
+# 任何换行转换都会破坏哈希；按字节保存，不做文本转换。
+# CI 实证：GH Windows runner 默认 autocrlf=true，checkout 后 CRLF 导致
+# "Gen UI vendor hash mismatch: floating-ui-core-1.7.3.min.js"（run 38169542960）。
+apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/** -text -whitespace
