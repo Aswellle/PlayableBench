@@ -44,7 +44,9 @@ vi.mock("@zcode/shared", async (importOriginal) => {
 async function getBeforeReport(): Promise<
   (payload: { events?: Array<Record<string, unknown>> }) => unknown
 > {
-  await import("../src/main/appARMSBootstrap.js");
+  const bootstrap = await import("../src/main/appARMSBootstrap.js");
+  // SR-07 懒化后 init 不再在模块加载时执行；测试需显式触发（enabled: true）。
+  await bootstrap.getArmsInitPromise({ enabled: true });
   const config = init.mock.calls[0]?.[0] as unknown as {
     beforeReport: (payload: { events?: Array<Record<string, unknown>> }) => unknown;
   };
@@ -226,7 +228,8 @@ describe("appARMSBootstrap beforeReport", () => {
   });
 
   it("使用 Desktop 本地开发运行态计算 ARMS 环境", async () => {
-    await import("../src/main/appARMSBootstrap.js");
+    const bootstrap = await import("../src/main/appARMSBootstrap.js");
+    await bootstrap.getArmsInitPromise({ enabled: true });
     const shared = await import("@zcode/shared");
     const config = init.mock.calls[0]?.[0] as unknown as {
       env: string;

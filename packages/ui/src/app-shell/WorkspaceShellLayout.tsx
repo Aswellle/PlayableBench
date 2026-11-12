@@ -1296,7 +1296,21 @@ export const WorkspaceShellLayout = memo(
         onWorkspaceMainViewChange("chat");
       }
     }, [isWebRemoteControlShell, onWorkspaceMainViewChange, workspaceMainView]);
-    const handleCreateTaskInChat = useCallback(
+    // PlayableBench 导航回调（Phase 2）：稳定引用，避免向 memo 化的 WorkspaceSidebar
+  // 传内联 lambda（reactStableReferences 治理测试扫描 memo 组件的内联 props）。
+  const handleOpenTodayMain = useCallback(
+    () => onWorkspaceMainViewChange("today"),
+    [onWorkspaceMainViewChange],
+  );
+  const handleOpenInboxMain = useCallback(
+    () => onWorkspaceMainViewChange("inbox"),
+    [onWorkspaceMainViewChange],
+  );
+  const handleOpenRadarMain = useCallback(
+    () => onWorkspaceMainViewChange("radar"),
+    [onWorkspaceMainViewChange],
+  );
+  const handleCreateTaskInChat = useCallback(
       (request?: Parameters<typeof onCreateTask>[0]) => {
         // workspaceReadOnlyReason 判定的是活动 workspace；当 request 显式带 targetWorkspace 时
         // 目标另属他项目（跨项目发起已保存工作流，docs/dynamic-workflow/launch.md「The detail page」），
@@ -2515,11 +2529,11 @@ export const WorkspaceShellLayout = memo(
                     automationsActive={workspaceMainView === "automations"}
                     onOpenPluginStore={handleOpenPluginStore}
                     pluginStoreActive={workspaceMainView === "plugin-store"}
-                    onOpenToday={() => onWorkspaceMainViewChange("today")}
+                    onOpenToday={handleOpenTodayMain}
                     todayActive={workspaceMainView === "today"}
-                    onOpenInbox={() => onWorkspaceMainViewChange("inbox")}
+                    onOpenInbox={handleOpenInboxMain}
                     inboxActive={workspaceMainView === "inbox"}
-                    onOpenRadar={() => onWorkspaceMainViewChange("radar")}
+                    onOpenRadar={handleOpenRadarMain}
                     radarActive={workspaceMainView === "radar"}
                     onFileTreeOpenChange={setIsSidebarFileTreeOpen}
                     onWebRemoteTaskOpen={handleWebRemoteTaskOpen}
