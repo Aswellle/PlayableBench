@@ -118,7 +118,7 @@ export class InboxRepo {
     const id = `inbox-${randomUUID()}`;
     this.getDatabase()
       .prepare(
-        `INSERT INTO inbox_items (
+        `INSERT INTO pb_inbox_items (
           id, kind, raw_input, title, source_url, status,
           task_id, created_at, updated_at, processed_at
         ) VALUES (?, ?, ?, ?, ?, 'unprocessed', NULL, ?, ?, NULL)`,
@@ -136,10 +136,10 @@ export class InboxRepo {
     const limit = Math.max(1, Math.min(params?.limit ?? 100, 500));
     const rows = params?.status
       ? (this.getDatabase()
-          .prepare(`SELECT * FROM inbox_items WHERE status = ? ORDER BY created_at DESC LIMIT ?`)
+          .prepare(`SELECT * FROM pb_inbox_items WHERE status = ? ORDER BY created_at DESC LIMIT ?`)
           .all(params.status, limit) as unknown as InboxRow[])
       : (this.getDatabase()
-          .prepare(`SELECT * FROM inbox_items ORDER BY created_at DESC LIMIT ?`)
+          .prepare(`SELECT * FROM pb_inbox_items ORDER BY created_at DESC LIMIT ?`)
           .all(limit) as unknown as InboxRow[]);
     return rows.map(rowToItem);
   }
@@ -147,7 +147,7 @@ export class InboxRepo {
   async get(id: string): Promise<InboxItem | null> {
     await this.ensureReady();
     const row = this.getDatabase()
-      .prepare(`SELECT * FROM inbox_items WHERE id = ?`)
+      .prepare(`SELECT * FROM pb_inbox_items WHERE id = ?`)
       .get(id) as InboxRow | undefined;
     return row ? rowToItem(row) : null;
   }
@@ -158,7 +158,7 @@ export class InboxRepo {
     const now = Date.now();
     this.getDatabase()
       .prepare(
-        `UPDATE inbox_items
+        `UPDATE pb_inbox_items
          SET status = 'processed', task_id = ?, processed_at = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -172,7 +172,7 @@ export class InboxRepo {
     const now = Date.now();
     this.getDatabase()
       .prepare(
-        `UPDATE inbox_items
+        `UPDATE pb_inbox_items
          SET status = 'failed', processing_error = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -184,7 +184,7 @@ export class InboxRepo {
     await this.ensureReady();
     const now = Date.now();
     this.getDatabase()
-      .prepare(`UPDATE inbox_items SET status = 'archived', updated_at = ? WHERE id = ?`)
+      .prepare(`UPDATE pb_inbox_items SET status = 'archived', updated_at = ? WHERE id = ?`)
       .run(now, id);
     return this.get(id);
   }

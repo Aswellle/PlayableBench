@@ -68,7 +68,7 @@ describe("tasks-index migration 0004 (playablebench domain)", () => {
         .get() as { title: string };
       expect(legacy.title).toBe("遗留任务");
       db.prepare(
-        `INSERT INTO inbox_items (id, kind, raw_input, status, created_at, updated_at)
+        `INSERT INTO pb_inbox_items (id, kind, raw_input, status, created_at, updated_at)
          VALUES ('inbox-1', 'text', '原始输入', 'unprocessed', 1, 1)`,
       ).run();
       const priorityRow = db

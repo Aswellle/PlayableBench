@@ -32,15 +32,8 @@ export interface InboxCaptureInput {
 
 export interface InboxConvertToTaskResult {
   inboxItemId: string;
-  task: {
-    taskId: string;
-    title: string;
-    workspacePath: string;
-    createdAt: number;
-    updatedAt: number;
-    traceId: string;
-    mode: string;
-  };
+  /** 转出的任务完整 meta（经 tasks-index 持久化）。 */
+  task: ZCodeTaskMeta;
 }
 
 export type ProjectStatus = "active" | "archived";

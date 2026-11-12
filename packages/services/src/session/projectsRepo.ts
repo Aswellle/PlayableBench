@@ -153,7 +153,7 @@ export class ProjectsRepo {
     const id = `project-${randomUUID()}`;
     this.getDatabase()
       .prepare(
-        `INSERT INTO projects (id, name, description, color, status, created_at, updated_at)
+        `INSERT INTO pb_projects (id, name, description, color, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, 'active', ?, ?)`,
       )
       .run(id, name, params.description ?? null, params.color ?? null, now, now);
@@ -168,10 +168,10 @@ export class ProjectsRepo {
     await this.ensureReady();
     const rows = params?.status
       ? (this.getDatabase()
-          .prepare(`SELECT * FROM projects WHERE status = ? ORDER BY updated_at DESC`)
+          .prepare(`SELECT * FROM pb_projects WHERE status = ? ORDER BY updated_at DESC`)
           .all(params.status) as unknown as ProjectRow[])
       : (this.getDatabase()
-          .prepare(`SELECT * FROM projects ORDER BY updated_at DESC`)
+          .prepare(`SELECT * FROM pb_projects ORDER BY updated_at DESC`)
           .all() as unknown as ProjectRow[]);
     return rows.map(rowToProject);
   }
@@ -179,7 +179,7 @@ export class ProjectsRepo {
   async getProject(id: string): Promise<Project | null> {
     await this.ensureReady();
     const row = this.getDatabase()
-      .prepare(`SELECT * FROM projects WHERE id = ?`)
+      .prepare(`SELECT * FROM pb_projects WHERE id = ?`)
       .get(id) as ProjectRow | undefined;
     return row ? rowToProject(row) : null;
   }
@@ -196,7 +196,7 @@ export class ProjectsRepo {
     const name = params.name?.trim() || existing.name;
     this.getDatabase()
       .prepare(
-        `UPDATE projects
+        `UPDATE pb_projects
          SET name = ?, description = ?, color = ?, updated_at = ?
          WHERE id = ?`,
       )
@@ -216,7 +216,7 @@ export class ProjectsRepo {
     const now = Date.now();
     this.getDatabase()
       .prepare(
-        `UPDATE projects SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ?`,
+        `UPDATE pb_projects SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ?`,
       )
       .run(now, now, id);
     return this.getProject(id);
@@ -226,7 +226,7 @@ export class ProjectsRepo {
     await this.ensureReady();
     this.getDatabase()
       .prepare(
-        `UPDATE projects SET status = 'active', archived_at = NULL, updated_at = ? WHERE id = ?`,
+        `UPDATE pb_projects SET status = 'active', archived_at = NULL, updated_at = ? WHERE id = ?`,
       )
       .run(Date.now(), id);
     return this.getProject(id);
@@ -246,7 +246,7 @@ export class ProjectsRepo {
     const id = `note-${randomUUID()}`;
     this.getDatabase()
       .prepare(
-        `INSERT INTO notes (id, title, body, project_id, created_at, updated_at)
+        `INSERT INTO pb_notes (id, title, body, project_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(id, params.title?.trim() ?? "", params.body ?? "", params.projectId ?? null, now, now);
@@ -263,7 +263,7 @@ export class ProjectsRepo {
   async getNote(id: string): Promise<Note | null> {
     await this.ensureReady();
     const row = this.getDatabase()
-      .prepare(`SELECT * FROM notes WHERE id = ?`)
+      .prepare(`SELECT * FROM pb_notes WHERE id = ?`)
       .get(id) as NoteRow | undefined;
     return row ? rowToNote(row) : null;
   }
@@ -273,10 +273,10 @@ export class ProjectsRepo {
     const limit = Math.max(1, Math.min(params?.limit ?? 100, 500));
     const rows = params?.projectId
       ? (this.getDatabase()
-          .prepare(`SELECT * FROM notes WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?`)
+          .prepare(`SELECT * FROM pb_notes WHERE project_id = ? ORDER BY updated_at DESC LIMIT ?`)
           .all(params.projectId, limit) as unknown as NoteRow[])
       : (this.getDatabase()
-          .prepare(`SELECT * FROM notes ORDER BY updated_at DESC LIMIT ?`)
+          .prepare(`SELECT * FROM pb_notes ORDER BY updated_at DESC LIMIT ?`)
           .all(limit) as unknown as NoteRow[]);
     return rows.map(rowToNote);
   }
@@ -295,7 +295,7 @@ export class ProjectsRepo {
     const projectId =
       params.projectId === undefined ? existing.projectId ?? null : params.projectId;
     this.getDatabase()
-      .prepare(`UPDATE notes SET title = ?, body = ?, project_id = ?, updated_at = ? WHERE id = ?`)
+      .prepare(`UPDATE pb_notes SET title = ?, body = ?, project_id = ?, updated_at = ? WHERE id = ?`)
       .run(title, body, projectId, Date.now(), id);
     return this.getNote(id);
   }
@@ -304,7 +304,7 @@ export class ProjectsRepo {
   async deleteNote(id: string): Promise<boolean> {
     await this.ensureReady();
     const result = this.getDatabase()
-      .prepare(`DELETE FROM notes WHERE id = ?`)
+      .prepare(`DELETE FROM pb_notes WHERE id = ?`)
       .run(id);
     return result.changes > 0;
   }
@@ -320,14 +320,14 @@ export class ProjectsRepo {
     const now = Date.now();
     this.getDatabase()
       .prepare(
-        `INSERT INTO project_links (project_id, link_kind, link_id, created_at)
+        `INSERT INTO pb_project_links (project_id, link_kind, link_id, created_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(project_id, link_kind, link_id) DO NOTHING`,
       )
       .run(params.projectId, params.kind, params.linkId, now);
     const row = this.getDatabase()
       .prepare(
-        `SELECT * FROM project_links WHERE project_id = ? AND link_kind = ? AND link_id = ?`,
+        `SELECT * FROM pb_project_links WHERE project_id = ? AND link_kind = ? AND link_id = ?`,
       )
       .get(params.projectId, params.kind, params.linkId) as unknown as LinkRow;
     return rowToLink(row);
@@ -337,7 +337,7 @@ export class ProjectsRepo {
     await this.ensureReady();
     const result = this.getDatabase()
       .prepare(
-        `DELETE FROM project_links WHERE project_id = ? AND link_kind = ? AND link_id = ?`,
+        `DELETE FROM pb_project_links WHERE project_id = ? AND link_kind = ? AND link_id = ?`,
       )
       .run(params.projectId, params.kind, params.linkId);
     return result.changes > 0;
@@ -361,7 +361,7 @@ export class ProjectsRepo {
     }
     const clause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
     const rows = this.getDatabase()
-      .prepare(`SELECT * FROM project_links ${clause} ORDER BY created_at DESC`)
+      .prepare(`SELECT * FROM pb_project_links ${clause} ORDER BY created_at DESC`)
       .all(...args) as unknown as LinkRow[];
     return rows.map(rowToLink);
   }

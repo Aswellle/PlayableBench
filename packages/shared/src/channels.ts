@@ -175,6 +175,8 @@ export const ServiceChannels = {
   HighspeedCard: "highspeed-card",
   /** Onboarding 完成记录服务（本地持久化，后续上传服务器） */
   OnboardingRecord: "onboarding-record",
+  /** PlayableBench 个人工作管理服务（Inbox/Projects/Today，Phase 2） */
+  PlayableBench: "playablebench",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];

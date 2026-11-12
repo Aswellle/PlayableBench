@@ -46,6 +46,7 @@ import type { IFeedbackService } from "./feedback/feedback.js";
 import type { IPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IWindowControllerService } from "./window-controller/windowController.js";
 import type { IOnboardingRecordService } from "./onboarding/onboardingRecord.js";
+import type { IPlayableBenchService } from "./playablebench/playablebenchService.js";
 import type { IConversationShareService } from "./conversation-share/conversationShare.js";
 
 /** UI 层消费的统一服务接口 */
@@ -61,6 +62,8 @@ export interface IServiceAccessor {
   readonly settingService: ISettingService;
   /** Onboarding 完成记录（本地持久化）；旧测试 double / 不支持的 host 可不提供。 */
   readonly onboardingRecordService?: IOnboardingRecordService;
+  /** PlayableBench 个人工作管理（Inbox/Projects/Today）；旧 wire/远端可不提供。 */
+  readonly playableBenchService?: IPlayableBenchService;
   readonly credentialService: ICredentialService;
   readonly broadcastService: IBroadcastService;
   readonly zcodeTaskService: IZCodeTaskService;

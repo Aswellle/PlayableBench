@@ -2337,7 +2337,7 @@ export class TaskIndexRepo {
       .prepare(
         `SELECT id, kind, raw_input, title, source_url, status, processing_error,
            task_id, created_at, updated_at, processed_at
-         FROM inbox_items
+         FROM pb_inbox_items
          WHERE status = 'unprocessed'
          ORDER BY created_at DESC
          LIMIT 10`,
@@ -2356,7 +2356,7 @@ export class TaskIndexRepo {
       processed_at: number | null;
     }>;
     const unprocessedCount = this.getDatabase()
-      .prepare(`SELECT COUNT(1) AS total FROM inbox_items WHERE status = 'unprocessed'`)
+      .prepare(`SELECT COUNT(1) AS total FROM pb_inbox_items WHERE status = 'unprocessed'`)
       .get() as { total: number } | undefined;
 
     return {
