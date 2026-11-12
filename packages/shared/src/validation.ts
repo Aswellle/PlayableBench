@@ -1649,6 +1649,11 @@ export const zcodeTaskMetaSchema = z.object({
   // off-peak 身份：与 cron 同款持久化策略——meta_json 单一来源 + tasks 表
   // off_peak_task_id 索引投影列（兜底/反查）。
   offPeakTaskId: nonEmptyStringSchema.optional(),
+  // PlayableBench 领域扩展（spec 06 §2）：优先级/截止日投影到 tasks 列，
+  // tags 仅存 meta_json。全部可省，旧数据不含这些键。
+  priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+  dueAt: z.number().int().nonnegative().optional(),
+  tags: z.array(z.string().min(1)).optional(),
   unreadAt: z.number().int().nonnegative().optional(),
   status: zcodeTaskPersistStatusSchema.optional(),
   lastError: z
