@@ -15,6 +15,9 @@ import {
   Archive,
   Blocks,
   CalendarClock,
+  Inbox,
+  Radar,
+  Sunrise,
   Clock3,
   Cloud,
   Folder,
@@ -267,6 +270,12 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   onOpenAutomations,
   onOpenPluginStore,
   automationsActive = false,
+  onOpenToday,
+  todayActive = false,
+  onOpenInbox,
+  inboxActive = false,
+  onOpenRadar,
+  radarActive = false,
   pluginStoreActive = false,
   onFileTreeOpenChange,
   onWebRemoteTaskOpen,
@@ -323,6 +332,13 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   onOpenAutomations?: () => void;
   onOpenPluginStore?: () => void;
   automationsActive?: boolean;
+  /** PlayableBench 导航（Phase 2）：Today/Inbox 真实页面；Radar 为"未启用"占位。 */
+  onOpenToday?: () => void;
+  todayActive?: boolean;
+  onOpenInbox?: () => void;
+  inboxActive?: boolean;
+  onOpenRadar?: () => void;
+  radarActive?: boolean;
   pluginStoreActive?: boolean;
   onFileTreeOpenChange?: (open: boolean) => void;
   onWebRemoteTaskOpen?: (options: { crossWorkspace: boolean }) => void;
@@ -869,6 +885,15 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
   const handleOpenAutomationsMain = useCallback(() => {
     onOpenAutomations?.();
   }, [onOpenAutomations]);
+  const handleOpenTodayMain = useCallback(() => {
+    onOpenToday?.();
+  }, [onOpenToday]);
+  const handleOpenInboxMain = useCallback(() => {
+    onOpenInbox?.();
+  }, [onOpenInbox]);
+  const handleOpenRadarMain = useCallback(() => {
+    onOpenRadar?.();
+  }, [onOpenRadar]);
   const handleOpenCodingPlanUpgrade = useCallback(
     (
       providerId: string,
@@ -1537,6 +1562,52 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
               再叠加下面 workspace 任务区后会出现两段任务列表，和桌面端结构不一致且容易混淆。
               这里移除顶部索引入口，统一复用 workspace 任务区作为唯一任务列表。 */}
             {!isWebRemoteControlSidebar ? (
+              <>
+              <Button
+                variant="ghost"
+                onClick={handleOpenTodayMain}
+                data-icon="inline-start"
+                data-testid="playablebench-today-open"
+                size="lg"
+                aria-pressed={todayActive}
+                className={cn(
+                  "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
+                  todayActive && "bg-selected text-foreground",
+                )}
+              >
+                <Sunrise className="size-4" />
+                {intl.formatMessage({ id: "playablebench.today.title" })}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={handleOpenInboxMain}
+                data-icon="inline-start"
+                data-testid="playablebench-inbox-open"
+                size="lg"
+                aria-pressed={inboxActive}
+                className={cn(
+                  "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
+                  inboxActive && "bg-selected text-foreground",
+                )}
+              >
+                <Inbox className="size-4" />
+                {intl.formatMessage({ id: "playablebench.inbox.title" })}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={handleOpenRadarMain}
+                data-icon="inline-start"
+                data-testid="playablebench-radar-open"
+                size="lg"
+                aria-pressed={radarActive}
+                className={cn(
+                  "w-full justify-start gap-2 text-foreground hover:bg-surface-hover hover:text-foreground",
+                  radarActive && "bg-selected text-foreground",
+                )}
+              >
+                <Radar className="size-4" />
+                {intl.formatMessage({ id: "playablebench.radar.title" })}
+              </Button>
               <Button
                 variant="ghost"
                 onClick={handleOpenAutomationsMain}
@@ -1552,6 +1623,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
                 <CalendarClock className="size-4" />
                 {intl.formatMessage({ id: "workspace.openScheduledSettings" })}
               </Button>
+              </>
             ) : null}
             <Button
               variant="ghost"
