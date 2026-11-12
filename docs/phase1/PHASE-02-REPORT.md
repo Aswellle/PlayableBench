@@ -40,7 +40,8 @@
 
 ## 5. CI 结论（回填）
 
-`43278670953`：quality **PASS** / unit **PASS** / build **PASS**（三 job 全绿；Phase 2 新增测试文件全部入正闸；以 run 记录为准）。
+- 首轮 `43279065134`：quality ✅ build ✅ unit ❌（4 文件 16 用例）——全部为 Phase 2 改动的**治理测试适配缺口**而非业务缺陷：ARMS 懒化后测试未显式触发 init、BreadcrumbFrame/stable-scroller 治理计数 4→5、PlayableBench 侧栏内联 lambda 违反稳定引用治理、迁移 facts 计数与末位 ID 随 0004 变化。已逐组修复（提交 `6ed50f44`）。
+- 终轮 `43288392608`：quality **PASS** / unit **PASS** / build **PASS**（三 job 全绿，1918 文件口径；以 run 记录为准）。
 
 ## 6. 验收对照（spec 16 Phase 2 门禁）
 
@@ -62,4 +63,4 @@
 
 ## 8. 结论
 
-**PASS WITH KNOWN ISSUES**——Phase 2 核心门禁（迁移/搜索/数据保持/失败处理）全部通过，新增能力（服务面、UI、遥测 opt-out）可验证；S5 与 Projects UI 如实顺延。
+**PASS WITH KNOWN ISSUES**——Phase 2 核心门禁（迁移/搜索/数据保持/失败处理）全部通过，CI 终轮三 job 全绿（含全部新增能力与治理测试适配）；S5 与 Projects UI 如实顺延。
