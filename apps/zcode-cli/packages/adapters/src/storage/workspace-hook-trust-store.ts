@@ -16,7 +16,10 @@ import {
 const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
 const DEFAULT_STALE_LOCK_MS = 30_000;
 const LOCK_RETRY_MS = 10;
-const DEFAULT_RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800] as const;
+// 与 shared/privateFilePersistence、services/fs/atomicFileUtils 的重试梯子保持
+// 一致（总等待 6.35s）：Windows 杀软/索引器对目标文件的占用可超过 1.55s，
+// 短梯子在 CI 与真实桌面环境都会让已 fsync 的信任变更误报失败。
+const DEFAULT_RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
 const SECURITY_DIRECTORY = "security";
 const TRUST_STORE_FILE = "workspace-hook-trust-v1.json";
 // 进程启动时间的比较容差：ps/proc 的秒级精度 + 调度延迟，2s 足以覆盖且不放过复用。
