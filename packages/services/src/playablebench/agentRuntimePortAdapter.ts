@@ -18,6 +18,7 @@ import type {
   IAgentRuntimePort,
   RuntimeHealth,
 } from "#src/playablebench/agentRuntimePort.js";
+import { listToolDescriptors } from "#src/playablebench/toolPolicy.js";
 
 /** SR-02：PB run 默认禁 yolo/auto（workspace 默认 yolo，端口层显式收窄）。 */
 const ALLOWED_RUN_PERMISSION_MODES = ["plan", "build", "edit", "guarded"] as const;
@@ -277,8 +278,8 @@ export class AgentRuntimePortAdapter implements IAgentRuntimePort {
   async listAvailableTools(runId: string): Promise<AgentToolDescriptor[]> {
     const run = await this.options.runRepo.getRun(runId);
     if (!run) return [];
-    // S4 接入产品策略 registry；当前阶段先返回空投影（不冒充运行时事实）。
-    return [];
+    // 产品策略侧投影（spec 05 §4）：风险分级来自 toolPolicy 静态声明，模型不可改。
+    return listToolDescriptors();
   }
 
   async health(): Promise<RuntimeHealth> {

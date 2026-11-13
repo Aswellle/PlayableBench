@@ -211,4 +211,15 @@ describe("AgentRuntimePort 命令映射", () => {
     expect(snapshot?.eventsCursor).toBeGreaterThan(1);
     expect(await port.getRun("missing")).toBeNull();
   });
+
+  it("listAvailableTools 投影产品策略注册表（高风险项必须审批）", async () => {
+    const { port } = makeHarness();
+    const descriptor = await port.createRun({ goal: "目标" }, policy);
+    const tools = await port.listAvailableTools(descriptor.runId);
+    const bash = tools.find((t) => t.toolId === "Bash");
+    expect(bash).toMatchObject({ riskLevel: "high", requiresApproval: true });
+    const read = tools.find((t) => t.toolId === "Read");
+    expect(read).toMatchObject({ riskLevel: "low", requiresApproval: false });
+    expect(await port.listAvailableTools("missing")).toEqual([]);
+  });
 });
