@@ -63,8 +63,8 @@ describe("DB109 App 库统一迁移", () => {
       "tasks_schema_migration",
     ]);
     const ledger = db.prepare("SELECT * FROM tasks_schema_migration").all();
-    // 0005 迁移（Run 域）加入账本后总数为 5。
-    expect(ledger).toHaveLength(5);
+    // 0006 迁移（FTS notes 修复）加入账本后总数为 6。
+    expect(ledger).toHaveLength(6);
     runTasksDatabaseMigrations(db);
     expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toEqual(ledger);
   });
@@ -284,8 +284,8 @@ describe("DB109 App 库统一迁移", () => {
       Atomics.store(new Int32Array(gate), 0, 1);
       Atomics.notify(new Int32Array(gate), 0);
       expect(await Promise.all(exits)).toEqual([[0], [0]]);
-      // 0005 迁移（Run 域）加入账本后总数为 5。
-      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(5);
+      // 0006 迁移（FTS notes 修复）加入账本后总数为 6。
+      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(6);
       expect(db.prepare("SELECT * FROM migration_probe").all()).toHaveLength(1);
       expect(db.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
     } finally {
