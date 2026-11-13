@@ -13,6 +13,7 @@ import {
   PLAYABLEBENCH_DOMAIN_V4_SQL,
   TASK_FIELDS_V4,
 } from "#src/session/tasksDatabase/playablebench-domain-v4.js";
+import { applyPlayableBenchRunsV5, PLAYABLEBENCH_RUNS_V5_SQL } from "#src/session/tasksDatabase/playablebench-runs-v5.js";
 
 // 冻结历史列声明，不能以实时 Repo/schema 代替，否则新版构建会改变已应用 checksum。
 const columns = [
@@ -73,6 +74,10 @@ const definitions = [
     id: "0004_playablebench_domain",
     checksumInput: [PLAYABLEBENCH_DOMAIN_V4_SQL, TASK_FIELDS_V4, "playablebench-domain-v1"],
   },
+  {
+    id: "0005_playablebench_runs",
+    checksumInput: [PLAYABLEBENCH_RUNS_V5_SQL, "playablebench-runs-v1"],
+  },
 ] as const;
 
 export function runTasksDatabaseMigrations(
@@ -123,6 +128,7 @@ export function runTasksDatabaseMigrations(
       if (migration.id === "0001_adopt_task_schema") adoptSchema(db);
       else if (migration.id === "0002_provider_selection") importLegacyAutomationSelections(db);
       else if (migration.id === "0004_playablebench_domain") applyPlayableBenchDomainV4(db);
+      else if (migration.id === "0005_playablebench_runs") applyPlayableBenchRunsV5(db);
       else db.exec(OFFICIAL_GLM_SELECTION_MIGRATION_SQL);
       migrationFacts.executedCount++;
       db.prepare("INSERT INTO tasks_schema_migration VALUES(?,?,?)").run(

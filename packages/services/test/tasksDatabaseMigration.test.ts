@@ -27,6 +27,7 @@ describe("DB109 App 库统一迁移", () => {
       .all();
     // 0004 迁移的 PlayableBench 域表（pb_ 前缀避免与上游 projects 同名表冲突）
     // 与 trigram 全文索引影子表（fts_tasks 索引上游 tasks 表；pb_ 内容表对应 pb_ 域表）。
+    // 0005 迁移加入 Run 域四表（runs/run_events/tool_executions/approvals）。
     expect(tables.map((row) => row.name)).toEqual([
       "automation_runs",
       "automations",
@@ -46,10 +47,14 @@ describe("DB109 App 库统一迁移", () => {
       "fts_tasks_docsize",
       "fts_tasks_idx",
       "off_peak_tasks",
+      "pb_approvals",
       "pb_inbox_items",
       "pb_notes",
       "pb_project_links",
       "pb_projects",
+      "pb_run_events",
+      "pb_runs",
+      "pb_tool_executions",
       "task_group_members",
       "task_group_view_node_orders",
       "task_group_workspace_bootstraps",
@@ -58,8 +63,8 @@ describe("DB109 App 库统一迁移", () => {
       "tasks_schema_migration",
     ]);
     const ledger = db.prepare("SELECT * FROM tasks_schema_migration").all();
-    // 0004 迁移（PlayableBench 域）加入账本后总数为 4。
-    expect(ledger).toHaveLength(4);
+    // 0005 迁移（Run 域）加入账本后总数为 5。
+    expect(ledger).toHaveLength(5);
     runTasksDatabaseMigrations(db);
     expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toEqual(ledger);
   });
@@ -279,8 +284,8 @@ describe("DB109 App 库统一迁移", () => {
       Atomics.store(new Int32Array(gate), 0, 1);
       Atomics.notify(new Int32Array(gate), 0);
       expect(await Promise.all(exits)).toEqual([[0], [0]]);
-      // 0004 迁移（PlayableBench 域）加入账本后总数为 4。
-      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(4);
+      // 0005 迁移（Run 域）加入账本后总数为 5。
+      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(5);
       expect(db.prepare("SELECT * FROM migration_probe").all()).toHaveLength(1);
       expect(db.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
     } finally {
