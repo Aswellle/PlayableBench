@@ -7,7 +7,11 @@ import { acquireFileLock } from "./atomicFileLock.js";
 const DEFAULT_LOCK_RETRY_DELAYS_MS = [25, 50, 100, 200, 400] as const;
 const DEFAULT_LOCK_OWNERLESS_GRACE_MS = 100;
 const DEFAULT_LOCK_MAX_WAIT_MS = 8_000;
-const DEFAULT_RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800] as const;
+// Windows 上原子替换的目标文件可能被杀毒实时扫描或并发读取短暂占用，
+// EPERM 重试窗口需要覆盖数秒级占用：CI 实测 1.55s 预算耗尽后仍偶发
+// EPERM（run 43295320919，provider-config.json rename）。与
+// services/src/fs/atomicFileUtils.ts 的既有梯子保持一致（总等待 6.35s）。
+const DEFAULT_RENAME_RETRY_DELAYS_MS = [50, 100, 200, 400, 800, 1600, 3200] as const;
 const processFileLockTails = new Map<string, Promise<void>>();
 
 export interface SharedFileLockOptions {
