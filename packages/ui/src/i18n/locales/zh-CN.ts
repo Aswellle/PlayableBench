@@ -1938,7 +1938,6 @@ const zhCN: Record<string, string> = {
   "playablebench.radar.openOriginal": "原文",
   "playablebench.radar.publishedAt": "发布：{time}",
   "playablebench.radar.firstSeenAt": "发现：{time}",
-  "playablebench.radar.notEnabled": "尚未启用：信息雷达将在信息雷达阶段开放，当前页仅为占位。",
   "playablebench.refresh": "刷新",
   "playablebench.loading": "加载中……",
   "playablebench.unsupportedHost": "当前宿主不提供个人工作管理服务（远端会话不可用）。",

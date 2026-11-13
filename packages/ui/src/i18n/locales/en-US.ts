@@ -2073,7 +2073,6 @@ const enUS: Record<string, string> = {
   "playablebench.radar.openOriginal": "Open original",
   "playablebench.radar.publishedAt": "Published: {time}",
   "playablebench.radar.firstSeenAt": "Seen: {time}",
-  "playablebench.radar.notEnabled": "Not enabled yet: the information radar ships in its own phase; this page is a placeholder.",
   "playablebench.refresh": "Refresh",
   "playablebench.loading": "Loading……",
   "playablebench.unsupportedHost": "Personal workspace service is unavailable on this host (remote sessions).",
