@@ -374,6 +374,8 @@ import { createTerminalService } from "./terminal/terminalService.js";
 import { createSettingServiceWithMigrations } from "./setting/settingService.js";
 import { createOnboardingRecordService } from "./onboarding/onboardingRecordService.js";
 import { createPlayableBenchService } from "./playablebench/playablebenchService.js";
+import { createFeedService } from "./playablebench/feedServiceHost.js";
+import { IFeedService } from "./playablebench/feedService.js";
 import { IPlayableBenchService } from "./playablebench/playablebench.js";
 import { createLegacyTeamOrganizationResolver } from "./model-provider/legacyTeamOrganizationResolver.js";
 import { createObservableSettingService } from "./setting/observableSettingService.js";
@@ -2401,6 +2403,7 @@ export function createLocalServices(options: {
     .register(ISettingService, settingService)
     .register(IOnboardingRecordService, onboardingRecordService)
     .register(IPlayableBenchService, createPlayableBenchService())
+    .register(IFeedService, createFeedService())
     .register(ICredentialService, credentialService)
     .register(IBroadcastService, broadcastService)
     .register(IZCodeTaskService, zcodeTaskService)

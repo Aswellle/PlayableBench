@@ -10,6 +10,7 @@ import {
   ISettingService,
   IOnboardingRecordService,
   IPlayableBenchService,
+  IFeedService,
   ICredentialService,
   IBroadcastService,
   IZCodeTaskService,
@@ -67,6 +68,7 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly settingService: ISettingService;
   readonly onboardingRecordService: IOnboardingRecordService;
   readonly playableBenchService: IPlayableBenchService;
+  readonly feedService: IFeedService;
   readonly credentialService: ICredentialService;
   readonly broadcastService: IBroadcastService;
   readonly zcodeTaskService: IZCodeTaskService;
@@ -140,6 +142,9 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.playableBenchService = ProxyChannel.toService<IPlayableBenchService>(
       channelClient.getChannel(IPlayableBenchService.channelName),
+    );
+    this.feedService = ProxyChannel.toService<IFeedService>(
+      channelClient.getChannel(IFeedService.channelName),
     );
     this.credentialService = ProxyChannel.toService<ICredentialService>(
       channelClient.getChannel(ICredentialService.channelName),
