@@ -86,6 +86,10 @@ export type {
   CreateOnboardingRecordServiceOptions,
   OnboardingRecordServiceFactory,
 } from "./onboarding/onboardingRecord.js";
+// PlayableBench 个人工作管理服务（Phase 2）：descriptor 与类型从纯文件导出，
+// 工厂函数（playablebenchService.ts，携带 node:sqlite 链）仅由 host/node.ts 导入。
+export { IPlayableBenchService } from "./playablebench/playablebench.js";
+export type { IPlayableBenchService as IPlayableBenchServiceType } from "./playablebench/playablebench.js";
 // 这里只能导出 descriptor 和类型。根 index 会被 renderer 经 value import 拉进浏览器包，
 // 若 value 导出 createOnboardingRecordService，会连带 fs/atomicFileUtils → @zcode/shared/node →
 // node:timers/promises 整条 Node 链进浏览器，模块加载直接抛错导致整个应用黑屏。

@@ -159,6 +159,9 @@ export type ZCodeTaskMode =
   | "autoEdit"
   | "build";
 
+/** 任务优先级（PlayableBench 领域扩展，spec 06 §2）；缺省视为未设置。 */
+export type ZCodeTaskPriority = "low" | "normal" | "high" | "urgent";
+
 export type ZCodeOffPeakRunType = "init" | "resume";
 
 /** 单个自动输入轮的来源归因；两种后台业务身份禁止同时存在。 */
@@ -320,6 +323,12 @@ export interface ZCodeTaskMeta {
   runtimeEpoch?: number;
   /** 创建此 task 时使用的 agent provider，缺省视为 "glm"（旧数据兼容） */
   provider?: ZCodeProvider;
+  /** PlayableBench 任务优先级投影（spec 06 §2）；列 + meta_json 双写。 */
+  priority?: ZCodeTaskPriority;
+  /** PlayableBench 截止时间（epoch ms，UTC）；Today 聚合按此判定逾期/今日。 */
+  dueAt?: number;
+  /** PlayableBench 用户标签；仅存 meta_json，MVP 不做列投影。 */
+  tags?: string[];
   /** 迁移来源；普通新建任务为空，用于识别 Claude Code 原生历史导入。 */
   migrationSource?: ZCodeTaskMigrationSource;
   /**

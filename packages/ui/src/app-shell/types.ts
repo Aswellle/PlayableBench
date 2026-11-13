@@ -125,7 +125,16 @@ export interface GitChangeSummary {
   removed: number;
 }
 
-export type WorkspaceMainView = "chat" | "automations" | "plugin-store";
+export type WorkspaceMainView =
+  | "chat"
+  | "automations"
+  | "plugin-store"
+  /** PlayableBench Today 聚合页（Phase 2，spec 01 §4.1）。 */
+  | "today"
+  /** PlayableBench Inbox 页（Phase 2，spec 01 §4.2）。 */
+  | "inbox"
+  /** Information Radar 占位：Phase 4 前呈"未启用"状态，不冒充可用（spec 10 §6）。 */
+  | "radar";
 
 export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackService"> {
   workspaceReadOnlyReason?: string;

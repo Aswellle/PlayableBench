@@ -160,7 +160,20 @@ armsRum.client.useReporter = (reporter) => {
   });
   useReporter(reporter);
 };
-export const armsInitPromise = armsRum
+/**
+ * 懒初始化（安全审计 SR-07）：模块加载不再立即 init，由调用方在窗口创建前
+ * 传入 telemetryEnabled 门控。首次调用缓存同一 Promise；关闭时返回已解决的
+ * null，不触碰 ARMS SDK（崩溃/性能采集同受开关约束）。
+ */
+let cachedArmsInitPromise: Promise<unknown> | null = null;
+export function getArmsInitPromise(options: {
+  enabled?: boolean;
+} = {}): Promise<unknown> {
+  if (options.enabled === false) {
+    logger.info("[arms] telemetry disabled by user setting; skip ARMS init");
+    return Promise.resolve(null);
+  }
+  cachedArmsInitPromise ??= armsRum
   .init({
     enable: ZCODE_ARMS_RUM_ENDPOINT !== "",
     version: ZCODE_VERSION,
@@ -247,11 +260,13 @@ export const armsInitPromise = armsRum
       }
       return payload;
     },
-  })
-  .then(() => {
-    logger.info(`[arms] electron initialized env=${armsRumEnv} version=${ZCODE_VERSION}`);
-  })
-  .catch((error) => {
-    logger.error("[arms] electron init failed:", error);
-    throw error;
-  });
+    })
+    .then(() => {
+      logger.info(`[arms] electron initialized env=${armsRumEnv} version=${ZCODE_VERSION}`);
+    })
+    .catch((error) => {
+      logger.error("[arms] electron init failed:", error);
+      throw error;
+    });
+  return cachedArmsInitPromise;
+}

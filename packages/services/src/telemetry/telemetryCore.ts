@@ -42,6 +42,11 @@ const REPORT_MAX_ATTEMPTS = 2;
 
 interface TelemetryCoreDependencies {
   fetchImpl?: typeof fetch;
+  /**
+   * 遥测总开关（安全审计 SR-07）：解析为 false 时静默丢弃事件（debug 记录一次，
+   * 不打 warn 防高频刷屏）。未注入视为启用，保持既有行为与默认值。
+   */
+  isTelemetryEnabled?: () => Promise<boolean> | boolean;
   loadUserId?: () => Promise<string>;
   loadAuthorization?: (userId: string) => Promise<string | null>;
   loadMarketingParams?: () => Promise<OAuthLoginAttribution | null>;
@@ -417,6 +422,19 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
   ): Promise<void> {
     // 构建期未配置事件上报端点时不上报（见 docs/desktop/build-time-optional-capabilities.md）
     if (!REPORT_ENDPOINT) return;
+    // 用户 opt-out（SR-07）：开关关闭时丢弃事件。开关解析失败按启用处理（fail-open，
+    // 与"未注入视为启用"一致），避免设置读取故障静默吞掉诊断数据。
+    try {
+      if (dependencies.isTelemetryEnabled && (await dependencies.isTelemetryEnabled()) === false) {
+        telemetryLogger.debug(
+          undefined,
+          `telemetry disabled by user setting; drop event=${payload.elementName} eventId=${eventId}`,
+        );
+        return;
+      }
+    } catch {
+      // 开关读取异常不阻断上报主链路。
+    }
     let marketingParams: OAuthLoginAttribution | null = null;
     try {
       marketingParams = await loadMarketingParams();

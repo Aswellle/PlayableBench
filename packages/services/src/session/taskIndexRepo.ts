@@ -16,6 +16,9 @@ import {
   OFF_PEAK_DEFAULT_GROUP_ID,
   type ZCodeProvider,
   type ZCodeTaskMeta,
+  type TodaySummary,
+  type InboxItemKind,
+  type InboxItemStatus,
 } from "@zcode/shared";
 import type {
   ZCodeTaskListQuery,
@@ -1509,6 +1512,8 @@ export class TaskIndexRepo {
       record.searchableText !== undefined
         ? record.searchableText.slice(0, TASK_SEARCH_TEXT_MAX_CHARS)
         : (existing?.searchable_text ?? "");
+    // PlayableBench 领域投影（spec 06 §2）：meta_json 为单一来源；同步调用可能不带
+    // 这些字段，ON CONFLICT 的 CASE 在 NULL 时保留现有值，清空走显式 repo 方法。
     this.getDatabase()
       .prepare(
         `INSERT INTO tasks (
@@ -1534,6 +1539,8 @@ export class TaskIndexRepo {
           deleted,
           title_overridden,
           searchable_text,
+          priority,
+          due_at,
           meta_json
         ) VALUES (
           @workspace_key,
@@ -1558,6 +1565,8 @@ export class TaskIndexRepo {
           @deleted,
           @title_overridden,
           @searchable_text,
+          @priority,
+          @due_at,
           @meta_json
         )
         ON CONFLICT(workspace_key, task_id) DO UPDATE SET
@@ -1588,6 +1597,14 @@ export class TaskIndexRepo {
           deleted = excluded.deleted,
           title_overridden = excluded.title_overridden,
           searchable_text = excluded.searchable_text,
+          priority = CASE
+            WHEN @priority IS NOT NULL THEN excluded.priority
+            ELSE tasks.priority
+          END,
+          due_at = CASE
+            WHEN @due_at IS NOT NULL THEN excluded.due_at
+            ELSE tasks.due_at
+          END,
           meta_json = excluded.meta_json`,
       )
       .run({
@@ -1616,6 +1633,9 @@ export class TaskIndexRepo {
         deleted: record.deleted ? 1 : 0,
         title_overridden: record.titleOverridden ? 1 : 0,
         searchable_text: searchableText,
+        // PlayableBench 领域字段投影到查询列；meta_json 同时保留完整值。
+        priority: record.meta.priority ?? null,
+        due_at: record.meta.dueAt ?? null,
         meta_json: serializeMetaJson(record.meta),
       });
     const persisted = this.getTaskRow(record.meta);
@@ -2181,11 +2201,17 @@ export class TaskIndexRepo {
     if (normalizedSearchLike) {
       // 之前只按 title 模糊匹配，没有命中聊天正文；TaskSearchDialog 长期搜不到内容。
       // 现在 title 或 searchable_text 任一命中即视为匹配，正文摘要在结果阶段构建。
-      where.push("(LOWER(title) LIKE ? OR LOWER(searchable_text) LIKE ?)");
-    }
-
-    if (normalizedSearchLike) {
-      args.push(normalizedSearchLike, normalizedSearchLike);
+      // Phase 2（spec 06 §3）：FTS5 trigram 索引（0004 迁移）提供子串匹配（含 CJK），
+      // 与 LIKE 并集保底——FTS 命中集合是 LIKE 的超集补全，短语引号化防注入。
+      const ftsQuery = `"${search!.replace(/"/g, '""')}"`;
+      where.push(
+        `(LOWER(title) LIKE ? OR LOWER(searchable_text) LIKE ? OR task_id IN (
+          SELECT tasks.task_id FROM fts_tasks
+          JOIN tasks ON tasks.rowid = fts_tasks.rowid
+          WHERE fts_tasks MATCH ?
+        ))`,
+      );
+      args.push(normalizedSearchLike, normalizedSearchLike, ftsQuery);
     }
     const whereClause = where.join(" AND ");
     const totalRow = this.getDatabase()
@@ -2247,6 +2273,137 @@ export class TaskIndexRepo {
       total,
       hasMore: total > rows.length,
     };
+  }
+
+  /**
+   * Today 聚合（spec 01 §4.1，PlayableBench Phase 2）：全部来自持久化事实，
+   * 不推断 UI 临时状态。逾期 = due_at 已过且任务未进入终态（completed/failed/
+   * cancelled）；今日 = due_at 落在本地自然日内；高优 = high/urgent。
+   * Inbox 未处理数来自同库 inbox_items（0004 迁移）。
+   */
+  async queryTodaySummary(params?: {
+    /** 客户端时区偏移（分钟，= UTC-本地）；缺省用本机时区。 */
+    timezoneOffsetMinutes?: number;
+    nowMs?: number;
+  }): Promise<TodaySummary> {
+    await this.ensureReady();
+    const now = params?.nowMs ?? Date.now();
+    const offsetMinutes =
+      params?.timezoneOffsetMinutes ?? -new Date().getTimezoneOffset();
+    // 本地自然日边界：把 now 平移到"UTC 视角的本地钟"再取日界，最后平移回 UTC。
+    const shifted = new Date(now - offsetMinutes * 60_000);
+    const startOfLocalDay = Date.UTC(
+      shifted.getUTCFullYear(),
+      shifted.getUTCMonth(),
+      shifted.getUTCDate(),
+    );
+    const endOfTodayUtc = startOfLocalDay + 86_400_000 + offsetMinutes * 60_000;
+
+    const terminalPredicate = `task_status IS NULL OR task_status NOT IN ('completed','failed','cancelled')`;
+    const todayTasks = (predicate: string, order: string, limit: number) => {
+      const rows = this.getDatabase()
+        .prepare(
+          `SELECT
+            workspace_key, workspace_path, workspace_identity, task_id, title,
+            task_status, provider, mode, model, migration_source,
+            forked_from_task_id, cron_automation_id, off_peak_task_id,
+            created_at, updated_at, unread_at, pinned, archived, deleted,
+            title_overridden, searchable_text, priority, due_at, meta_json
+          FROM tasks
+          WHERE deleted = 0 AND ${predicate}
+          ORDER BY ${order}
+          LIMIT ?`,
+        )
+        .all(limit) as unknown as TaskIndexRow[];
+      return rows.map(rowToMeta);
+    };
+
+    const overdueTasks = todayTasks(
+      `due_at IS NOT NULL AND due_at < ${now} AND ${terminalPredicate}`,
+      "due_at ASC",
+      20,
+    );
+    const dueTodayTasks = todayTasks(
+      `due_at IS NOT NULL AND due_at >= ${now} AND due_at < ${endOfTodayUtc} AND ${terminalPredicate}`,
+      "due_at ASC",
+      20,
+    );
+    const highPriorityTasks = todayTasks(
+      `priority IN ('high','urgent') AND ${terminalPredicate}`,
+      "CASE priority WHEN 'urgent' THEN 0 ELSE 1 END, updated_at DESC",
+      20,
+    );
+    const inboxRows = this.getDatabase()
+      .prepare(
+        `SELECT id, kind, raw_input, title, source_url, status, processing_error,
+           task_id, created_at, updated_at, processed_at
+         FROM pb_inbox_items
+         WHERE status = 'unprocessed'
+         ORDER BY created_at DESC
+         LIMIT 10`,
+      )
+      .all() as unknown as Array<{
+      id: string;
+      kind: string;
+      raw_input: string;
+      title: string | null;
+      source_url: string | null;
+      status: string;
+      processing_error: string | null;
+      task_id: string | null;
+      created_at: number;
+      updated_at: number;
+      processed_at: number | null;
+    }>;
+    const unprocessedCount = this.getDatabase()
+      .prepare(`SELECT COUNT(1) AS total FROM pb_inbox_items WHERE status = 'unprocessed'`)
+      .get() as { total: number } | undefined;
+
+    return {
+      overdueTasks,
+      dueTodayTasks,
+      highPriorityTasks,
+      recentInboxItems: inboxRows.map((row) => ({
+        id: row.id,
+        kind: row.kind as InboxItemKind,
+        rawInput: row.raw_input,
+        title: row.title ?? undefined,
+        sourceUrl: row.source_url ?? undefined,
+        status: row.status as InboxItemStatus,
+        processingError: row.processing_error ?? undefined,
+        taskId: row.task_id ?? undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        processedAt: row.processed_at ?? undefined,
+      })),
+      counts: {
+        overdue: overdueTasks.length,
+        dueToday: dueTodayTasks.length,
+        highPriority: highPriorityTasks.length,
+        unprocessedInbox: unprocessedCount?.total ?? 0,
+      },
+      generatedAt: now,
+      timezoneOffsetMinutes: offsetMinutes,
+    };
+  }
+
+  /** 显式清空任务的优先级/截止日/标签：列与 meta_json 必须同步清（读取以 meta_json 为准）。 */
+  async clearTaskScheduleFields(params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+    taskId: string;
+  }): Promise<void> {
+    await this.ensureReady();
+    this.getDatabase()
+      .prepare(
+        `UPDATE tasks
+         SET priority = NULL,
+             due_at = NULL,
+             meta_json = json_remove(meta_json, '$.priority', '$.dueAt', '$.tags'),
+             updated_at = updated_at
+         WHERE workspace_key = ? AND task_id = ?`,
+      )
+      .run(workspaceKey(params), params.taskId);
   }
 
   async createTaskGroup(params?: {

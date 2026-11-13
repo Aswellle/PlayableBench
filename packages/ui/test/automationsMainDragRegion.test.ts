@@ -15,7 +15,8 @@ describe("workspace main view drag region", () => {
       "packages/ui/src/settings/AutomationsMainBreadcrumbFrame.tsx",
     );
 
-    // 断言语义不绑定排版：条件可被格式化换行。
+    // 断言语义不绑定排版：条件可被格式化换行。Phase 2 后 Header 隐藏面还包括
+    // today/inbox/radar（playablebench 主视图）。
     expect(layoutSource).toMatch(
       /workspaceMainView !== "automations"\s*&&\s*workspaceMainView !== "plugin-store"/,
     );
@@ -28,7 +29,7 @@ describe("workspace main view drag region", () => {
 
     expect(
       layoutSource.match(/<AutomationsMainBreadcrumbFrame/gu)?.length,
-    ).toBe(4);
+    ).toBe(5);
     expect(
       frameSource.match(/data-testid="automations-main-drag-region"/gu)?.length,
     ).toBe(1);
@@ -44,6 +45,6 @@ describe("workspace main view drag region", () => {
         /min-h-0 flex-1 overflow-y-auto \[scrollbar-gutter:stable\]/gu,
       )?.length ?? 0;
 
-    expect(stableScrollerCount).toBe(4);
+    expect(stableScrollerCount).toBe(5);
   });
 });

@@ -756,6 +756,8 @@ export function SettingsPage({
     setDesktopChromiumHardwareAccelerationEnabled,
   ] = useState(true);
   const [receivePreviewUpdates, setReceivePreviewUpdates] = useState(false);
+  // 安全审计 SR-07：遥测 opt-out。缺省启用（undefined ≠ false），与 main 进程门控一致。
+  const [telemetryEnabled, setTelemetryEnabled] = useState(true);
   const [autoDownloadAndInstallUpdates, setAutoDownloadAndInstallUpdates] = useState(false);
   const [messageStreamShowReasoning, setMessageStreamShowReasoning] = useState(true);
   const [messageStreamShowTodos, setMessageStreamShowTodos] = useState(false);
@@ -840,6 +842,7 @@ export function SettingsPage({
           settings.desktopChromiumHardwareAccelerationEnabled ?? true,
         );
         setReceivePreviewUpdates(settings.receivePreviewUpdates ?? false);
+        setTelemetryEnabled(settings.telemetryEnabled !== false);
         setAutoDownloadAndInstallUpdates(settings.autoDownloadAndInstallUpdates ?? false);
         setMessageStreamShowReasoning(settings.messageStreamShowReasoning ?? true);
         setMessageStreamShowTodos(settings.messageStreamShowTodos ?? false);
@@ -881,6 +884,7 @@ export function SettingsPage({
     setToolGroupingChangesEnabled(sharedSettings.toolGroupingChangesEnabled ?? false);
     setZCodeInteractionBehavior(sharedSettings.zcodeInteractionBehavior ?? "queue");
     setReceivePreviewUpdates(sharedSettings.receivePreviewUpdates ?? false);
+    setTelemetryEnabled(sharedSettings.telemetryEnabled !== false);
     setAutoDownloadAndInstallUpdates(sharedSettings.autoDownloadAndInstallUpdates ?? false);
   }, [sharedSettings]);
   const handleTerminalInheritSystemProfileChange = useCallback(
@@ -1204,6 +1208,13 @@ export function SettingsPage({
         },
       });
       setReceivePreviewUpdates(enabled);
+    },
+    [updateSharedSettings],
+  );
+  const handleTelemetryEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      await updateSharedSettings({ telemetryEnabled: enabled });
+      setTelemetryEnabled(enabled);
     },
     [updateSharedSettings],
   );
@@ -1721,6 +1732,8 @@ export function SettingsPage({
                               desktopChromiumHardwareAccelerationEnabled
                             }
                             receivePreviewUpdates={receivePreviewUpdates}
+                            telemetryEnabled={telemetryEnabled}
+                            onTelemetryEnabledChange={handleTelemetryEnabledChange}
                             autoDownloadAndInstallUpdates={autoDownloadAndInstallUpdates}
                             dataBaseDir={dataBaseDir}
                             terminalInheritSystemProfile={terminalInheritSystemProfile}

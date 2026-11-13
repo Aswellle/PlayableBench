@@ -52,6 +52,9 @@ import type {
   SavedWorkflowsOpenRunParams,
 } from "@/settings/saved-workflows/SavedWorkflowsSection.js";
 import { AutomationsMainBreadcrumbFrame } from "@/settings/AutomationsMainBreadcrumbFrame.js";
+import { TodayView } from "@/playablebench/TodayView.js";
+import { InboxView } from "@/playablebench/InboxView.js";
+import { RadarPlaceholderView } from "@/playablebench/RadarPlaceholderView.js";
 import { PluginStorePage } from "@/settings/PluginStorePage.js";
 import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WebRemoteControlMobileShell } from "@/WebRemoteControlMobileShell.js";
@@ -1277,7 +1280,11 @@ export const WorkspaceShellLayout = memo(
         ? handleManageInstalledPlugins
         : handleTaskNavBack;
     const canPrimaryNavigationBack =
-      workspaceMainView === "plugin-store" || canTaskNavBack;
+      workspaceMainView === "plugin-store" ||
+      workspaceMainView === "today" ||
+      workspaceMainView === "inbox" ||
+      workspaceMainView === "radar" ||
+      canTaskNavBack;
     useEffect(() => {
       if (
         isWebRemoteControlShell &&
@@ -1289,7 +1296,21 @@ export const WorkspaceShellLayout = memo(
         onWorkspaceMainViewChange("chat");
       }
     }, [isWebRemoteControlShell, onWorkspaceMainViewChange, workspaceMainView]);
-    const handleCreateTaskInChat = useCallback(
+    // PlayableBench 导航回调（Phase 2）：稳定引用，避免向 memo 化的 WorkspaceSidebar
+  // 传内联 lambda（reactStableReferences 治理测试扫描 memo 组件的内联 props）。
+  const handleOpenTodayMain = useCallback(
+    () => onWorkspaceMainViewChange("today"),
+    [onWorkspaceMainViewChange],
+  );
+  const handleOpenInboxMain = useCallback(
+    () => onWorkspaceMainViewChange("inbox"),
+    [onWorkspaceMainViewChange],
+  );
+  const handleOpenRadarMain = useCallback(
+    () => onWorkspaceMainViewChange("radar"),
+    [onWorkspaceMainViewChange],
+  );
+  const handleCreateTaskInChat = useCallback(
       (request?: Parameters<typeof onCreateTask>[0]) => {
         // workspaceReadOnlyReason 判定的是活动 workspace；当 request 显式带 targetWorkspace 时
         // 目标另属他项目（跨项目发起已保存工作流，docs/dynamic-workflow/launch.md「The detail page」），
@@ -2039,7 +2060,10 @@ export const WorkspaceShellLayout = memo(
     // 手机远控无 active task 时仍不渲染桌面 chrome，继续遵守 replayable overlay 边界。
     const shouldRenderMainViewHeader =
       workspaceMainView !== "automations" &&
-      workspaceMainView !== "plugin-store";
+      workspaceMainView !== "plugin-store" &&
+      workspaceMainView !== "today" &&
+      workspaceMainView !== "inbox" &&
+      workspaceMainView !== "radar";
     const shouldRenderWorkspaceHeader =
       shouldRenderMainViewHeader && (activeTaskId !== null || isDesktop);
     // 修复原因：ErrorBoundary resetKeys 的数组如果每次 render 都重新创建，
@@ -2160,7 +2184,51 @@ export const WorkspaceShellLayout = memo(
               workspaceMainView === "chat" ? renderChatFindDialog() : undefined
             }
             chatContent={
-              workspaceMainView === "automations" &&
+              (workspaceMainView === "today" ||
+                workspaceMainView === "inbox" ||
+                workspaceMainView === "radar") &&
+              !isWebRemoteControlShell ? (
+                <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
+                  <AutomationsMainBreadcrumbFrame
+                    isDesktop={Boolean(isDesktop)}
+                    sectionLabel={intl.formatMessage({
+                      id:
+                        workspaceMainView === "today"
+                          ? "playablebench.today.title"
+                          : workspaceMainView === "inbox"
+                            ? "playablebench.inbox.title"
+                            : "playablebench.radar.title",
+                    })}
+                    ariaLabel={intl.formatMessage({
+                      id:
+                        workspaceMainView === "today"
+                          ? "playablebench.today.title"
+                          : workspaceMainView === "inbox"
+                            ? "playablebench.inbox.title"
+                            : "playablebench.radar.title",
+                    })}
+                  >
+                    <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                      <div className="mx-auto flex w-full max-w-4xl flex-col px-4 py-4 md:px-6 md:py-6">
+                        <ScopedErrorBoundary
+                          scope="playablebench-main"
+                          resetKeys={workspaceOnlyResetKeys}
+                          variant="panel"
+                          className="min-h-full"
+                        >
+                          {workspaceMainView === "today" ? (
+                            <TodayView />
+                          ) : workspaceMainView === "inbox" ? (
+                            <InboxView workspacePath={workspaceAbsPath} />
+                          ) : (
+                            <RadarPlaceholderView />
+                          )}
+                        </ScopedErrorBoundary>
+                      </div>
+                    </div>
+                  </AutomationsMainBreadcrumbFrame>
+                </main>
+              ) : workspaceMainView === "automations" &&
                 !isWebRemoteControlShell ? (
                 <main
                   id={AUTOMATIONS_TOAST_ANCHOR_ID}
@@ -2461,6 +2529,12 @@ export const WorkspaceShellLayout = memo(
                     automationsActive={workspaceMainView === "automations"}
                     onOpenPluginStore={handleOpenPluginStore}
                     pluginStoreActive={workspaceMainView === "plugin-store"}
+                    onOpenToday={handleOpenTodayMain}
+                    todayActive={workspaceMainView === "today"}
+                    onOpenInbox={handleOpenInboxMain}
+                    inboxActive={workspaceMainView === "inbox"}
+                    onOpenRadar={handleOpenRadarMain}
+                    radarActive={workspaceMainView === "radar"}
                     onFileTreeOpenChange={setIsSidebarFileTreeOpen}
                     onWebRemoteTaskOpen={handleWebRemoteTaskOpen}
                     onWebRemoteTaskSwitchingChange={
