@@ -5,6 +5,7 @@
 // 本文件可被上层（含未来 renderer）安全引入。
 import type { PbApproval, PbRun, PbRunStatus, PbToolExecution } from "@zcode/shared";
 
+
 /** V4 ACK 六态直通（accepted/rejected/stale/duplicate/noop/failed），不二次发明。 */
 export type AgentRuntimeCommandStatus = "accepted" | "rejected" | "stale" | "duplicate" | "noop" | "failed";
 
@@ -96,9 +97,28 @@ export interface IAgentRuntimePort {
   cancel(runId: string, reason?: string): Promise<AgentCommandReceipt>;
   /**
    * 审批应答映射 V4 resolveInteraction：先校验审批 digest 绑定
-   * （spec 05 §3：参数或目标变化需重新审批），再转发决策。
+   * （spec 05 §3：参数或目标变化需重新审批）——decisionDigest 必须与
+   * 审批记录的 operationDigest 一致，不一致拒绝（digest_mismatch）。
    */
-  submitApproval(approvalId: string, decision: "approved" | "denied"): Promise<AgentCommandReceipt>;
+  submitApproval(
+    approvalId: string,
+    decision: "approved" | "denied",
+    decisionDigest?: string,
+  ): Promise<AgentCommandReceipt>;
+  /**
+   * 审批建档（创建侧绑定，spec 05 §3/§6）：digest 由 operation 数据计算，
+   * 同时登记工具执行（幂等键 = toolCallId）；返回持久化审批记录。
+   */
+  recordPendingApproval(params: {
+    runId: string;
+    toolId: string;
+    toolCallId?: string;
+    input?: unknown;
+    target?: string;
+    interactionId?: string;
+    riskSummary?: string;
+    expiresAt?: number;
+  }): Promise<PbApproval>;
   /** 产品策略侧工具投影（spec 05 §4）；实现见 toolPolicy.ts。 */
   listAvailableTools(runId: string): Promise<AgentToolDescriptor[]>;
   health(): Promise<RuntimeHealth>;

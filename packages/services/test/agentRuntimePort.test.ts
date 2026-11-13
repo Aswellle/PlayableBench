@@ -172,7 +172,13 @@ describe("AgentRuntimePort 命令映射", () => {
       requestJson: '{"tool":"bash"}',
       riskLevel: "high",
     });
-    const decided = await port.submitApproval(approval.id, "approved");
+    // digest 绑定：缺失或不匹配拒绝，匹配才转发（spec 05 §3）。
+    const missingDigest = await port.submitApproval(approval.id, "approved");
+    expect(missingDigest).toMatchObject({ status: "rejected", reasonCode: "approval_digest_mismatch" });
+    const mismatch = await port.submitApproval(approval.id, "approved", "digest-wrong");
+    expect(mismatch).toMatchObject({ status: "rejected", reasonCode: "approval_digest_mismatch" });
+    expect(sent.filter((c) => c.envelope.type === "resolveInteraction")).toHaveLength(0);
+    const decided = await port.submitApproval(approval.id, "approved", "digest-1");
     expect(decided.status).toBe("accepted");
     expect(sent.at(-1)?.envelope.type).toBe("resolveInteraction");
     expect(sent.at(-1)?.envelope.payload).toMatchObject({
@@ -182,7 +188,7 @@ describe("AgentRuntimePort 命令映射", () => {
     expect((await approvals.get(approval.id))?.decision).toBe("approved");
 
     // 重复决策被拒（单向收敛），不再转发 resolveInteraction。
-    const again = await port.submitApproval(approval.id, "denied");
+    const again = await port.submitApproval(approval.id, "denied", "digest-1");
     expect(again).toMatchObject({ status: "rejected", reasonCode: "approval_already_decided" });
     expect(sent.filter((c) => c.envelope.type === "resolveInteraction")).toHaveLength(1);
 
@@ -194,7 +200,7 @@ describe("AgentRuntimePort 命令映射", () => {
       requestJson: "{}",
       expiresAt: Date.now() - 1,
     });
-    const expiredReceipt = await port.submitApproval(expiring.id, "approved");
+    const expiredReceipt = await port.submitApproval(expiring.id, "approved", "digest-2");
     expect(expiredReceipt).toMatchObject({ status: "rejected", reasonCode: "approval_expired" });
     expect((await approvals.get(expiring.id))?.decision).toBe("expired");
     expect(sent.filter((c) => c.envelope.type === "resolveInteraction")).toHaveLength(1);

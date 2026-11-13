@@ -4,6 +4,7 @@
 // 事件映射（runtimeEventMapper）依据 V4 快照/增量完成，避免双写竞态。
 // workspace 定位一律取 run 持久化字段（workspacePath/Identity），适配器无跨 run 状态。
 import type { CommandAck } from "@zcode/shared/zcode-protocol-v4";
+import type { PbApproval } from "@zcode/shared";
 import type { IZCodeAgentService, ZCodeAgentWorkspaceTarget } from "#src/zcode-agent/zcodeAgent.js";
 import { createHostCommandEnvelope } from "#src/zcode-agent/zcodeV4HostCommand.js";
 import type { ApprovalRepo } from "#src/session/approvalRepo.js";
@@ -18,7 +19,8 @@ import type {
   IAgentRuntimePort,
   RuntimeHealth,
 } from "#src/playablebench/agentRuntimePort.js";
-import { listToolDescriptors } from "#src/playablebench/toolPolicy.js";
+import { computeOperationDigest } from "#src/playablebench/approvalDigest.js";
+import { getToolPolicyEntry, listToolDescriptors } from "#src/playablebench/toolPolicy.js";
 
 /** SR-02：PB run 默认禁 yolo/auto（workspace 默认 yolo，端口层显式收窄）。 */
 const ALLOWED_RUN_PERMISSION_MODES = ["plan", "build", "edit", "guarded"] as const;
@@ -240,6 +242,7 @@ export class AgentRuntimePortAdapter implements IAgentRuntimePort {
   async submitApproval(
     approvalId: string,
     decision: "approved" | "denied",
+    decisionDigest?: string,
   ): Promise<AgentCommandReceipt> {
     const approval = await this.options.approvals.get(approvalId);
     if (!approval) {
@@ -248,6 +251,11 @@ export class AgentRuntimePortAdapter implements IAgentRuntimePort {
     const runId = approval.runId;
     if (approval.decision !== "pending") {
       return rejectedReceipt(runId, "approval_already_decided");
+    }
+    // digest 绑定（spec 05 §3）：决策方携带其看到的操作摘要；与建档 digest
+    // 不一致说明参数/目标已变化，原审批失效需重新审批，不转发旧决策。
+    if (decisionDigest === undefined || decisionDigest !== approval.operationDigest) {
+      return rejectedReceipt(runId, "approval_digest_mismatch");
     }
     const run = await this.options.runRepo.getRun(runId);
     if (!run?.runtimeSessionId || !approval.interactionId) {
@@ -273,6 +281,46 @@ export class AgentRuntimePortAdapter implements IAgentRuntimePort {
       await this.options.approvals.decide(approvalId, decision, { decidedBy: "agent-runtime-port" });
     }
     return receiptFromAck(runId, ack);
+  }
+
+  async recordPendingApproval(params: {
+    runId: string;
+    toolId: string;
+    toolCallId?: string;
+    input?: unknown;
+    target?: string;
+    interactionId?: string;
+    riskSummary?: string;
+    expiresAt?: number;
+  }): Promise<PbApproval> {
+    const digest = computeOperationDigest({
+      toolId: params.toolId,
+      ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
+      ...(params.input !== undefined ? { input: params.input } : {}),
+      ...(params.target ? { target: params.target } : {}),
+    });
+    const execution = await this.options.toolExecutions.create({
+      runId: params.runId,
+      toolId: params.toolId,
+      ...(params.toolCallId ? { idempotencyKey: params.toolCallId } : {}),
+      inputDigest: digest,
+    });
+    const risk = getToolPolicyEntry(params.toolId);
+    return this.options.approvals.create({
+      runId: params.runId,
+      toolExecutionId: execution.id,
+      ...(params.interactionId ? { interactionId: params.interactionId } : {}),
+      operationDigest: digest,
+      requestJson: JSON.stringify({
+        toolId: params.toolId,
+        ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
+        ...(params.input !== undefined ? { input: params.input } : {}),
+        ...(params.target ? { target: params.target } : {}),
+      }),
+      riskLevel: risk.riskLevel,
+      ...(params.riskSummary ? { riskSummary: params.riskSummary } : {}),
+      ...(params.expiresAt !== undefined ? { expiresAt: params.expiresAt } : {}),
+    });
   }
 
   async listAvailableTools(runId: string): Promise<AgentToolDescriptor[]> {
