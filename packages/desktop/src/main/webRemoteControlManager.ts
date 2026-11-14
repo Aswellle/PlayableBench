@@ -42,6 +42,7 @@ import {
   type TelemetryEventPayload,
   measureWebRemoteControlRpcRelayEnvelopeBytes,
 } from "@zcode/shared";
+import { hashPairingCredential } from "@zcode/shared/node";
 import {
   WebRemoteControlDeviceTransport,
   type WebRemoteControlDeviceTransportAuth,
@@ -132,6 +133,64 @@ interface WindowControlRuntime {
   mobileDisconnectGraceTimer?: ReturnType<typeof setTimeout>;
 }
 
+/**
+ * 远程设备准入门（spec 09 §4/§6、裁决 SR-04）：每条手机命令 Host 端重检
+ * 设备确认状态与 scope，requestId 幂等防重放。未接线时行为保持既有
+ * （测试 double / 旧 wire 不受影响）；生产由 desktop main 注入 services 实现。
+ */
+/** 手机任务面（只读，spec 09 §2）：域操作由 services RemoteTaskFacade 实现。 */
+export interface WebRemoteControlTaskFacadeDependency {
+  taskList(
+    limit?: number,
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      templateId?: string;
+      startedAt?: number;
+      finishedAt?: number;
+      errorCode?: string;
+    }>
+  >;
+  runSummary(
+    runId: string,
+  ): Promise<{
+    run: unknown;
+    pendingApprovals: Array<{
+      id: string;
+      riskLevel?: string;
+      riskSummary?: string;
+      createdAt: number;
+    }>;
+  } | null>;
+  runEvents(
+    runId: string,
+    afterSequence?: number,
+    limit?: number,
+  ): Promise<Array<{ sequence: number; eventId: string; eventType: string; occurredAt: number }>>;
+}
+
+export interface WebRemoteControlDeviceGateDependency {
+  authorizeCommand(input: {
+    credentialHash: string;
+    commandType: string;
+    requestId: string;
+    payloadDigest: string;
+    sessionId?: string;
+  }): Promise<{
+    ok: boolean;
+    rejection?: string;
+    replayResult?: { resultJson?: string };
+  }>;
+  settleCommand(requestId: string, resultJson?: string): Promise<unknown>;
+  ensureDeviceSession(input: {
+    credentialHash: string;
+    deviceName?: string;
+    deviceType?: string;
+  }): Promise<{ confirmed: boolean }>;
+}
+
 interface WebRemoteControlManagerDependencies {
   getEndpointUrls?: () => Promise<ZCodeEndpointUrls> | ZCodeEndpointUrls;
   relayWsUrl: string;
@@ -152,6 +211,8 @@ interface WebRemoteControlManagerDependencies {
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
+  deviceGate?: WebRemoteControlDeviceGateDependency;
+  taskFacade?: WebRemoteControlTaskFacadeDependency;
   relayMessageLogger?: {
     info: (...args: unknown[]) => void;
   };
@@ -1155,23 +1216,281 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     });
   }
 
+  function sendBootstrapResponse(runtime: WindowControlRuntime, requestId: string): void {
+    sendAppPayload(runtime, {
+      zcode_type: "bootstrap-response",
+      requestId,
+      success: true,
+      result: buildBootstrapResult(runtime),
+    });
+  }
+
+  function sendWorkspaceListResponse(runtime: WindowControlRuntime, requestId: string): void {
+    sendAppPayload(runtime, {
+      zcode_type: "workspace-list-response",
+      requestId,
+      success: true,
+      result: buildWorkspaceListResult(runtime),
+    });
+  }
+
+  /**
+   * 手机命令授权（spec 09 §4/§6、SR-04）：数据类 payload 先过设备准入门
+   * （确认状态/scope/requestId 幂等），拒绝或重放时回显错误响应，不再继续。
+   * 未接线 deviceGate 时保持既有行为（测试 double/旧 wire）。
+   */
+  async function authorizeOrReject(
+    runtime: WindowControlRuntime,
+    commandType: string,
+    requestId: string,
+    digestInput: string,
+  ): Promise<boolean> {
+    const gate = dependencies.deviceGate;
+    if (!gate) return true;
+    const result = await gate
+      .authorizeCommand({
+        credentialHash: hashPairingCredential(runtime.passHash),
+        commandType,
+        requestId,
+        payloadDigest: hashPairingCredential(digestInput),
+        sessionId: runtime.deviceSid,
+      })
+      .catch((error) => {
+        dependencies.logger.warn(
+          `[web-remote-control] device gate failed window=${runtime.windowId} error=${error instanceof Error ? error.message : String(error)}`,
+        );
+        return { ok: false, rejection: "gate_error" } as const;
+      });
+    if (result.ok && !result.replayResult) {
+      void gate.settleCommand(requestId, '{"ok":true}').catch(() => undefined);
+      return true;
+    }
+    if (result.ok && result.replayResult) {
+      // 重放：回显先前结果语义（拒绝新执行），不再走实际处理。
+      dependencies.logger.warn(
+        `[web-remote-control] replayed command window=${runtime.windowId} requestId=${requestId}`,
+      );
+    } else {
+      dependencies.logger.warn(
+        `[web-remote-control] command rejected window=${runtime.windowId} command=${commandType} reason=${result.rejection ?? "unknown"}`,
+      );
+    }
+    sendAppPayload(runtime, {
+      zcode_type: "app-error",
+      requestId,
+      reason: "unsupported-action",
+      error: `command rejected: ${result.rejection ?? "unknown"}`,
+    });
+    return false;
+  }
+
   function routePayload(runtime: WindowControlRuntime, payload: WebRemoteControlAppPayload): void {
+    /** 手机任务面命令的授权 + 处理（授权拒绝回显错误响应）。 */
+    function routeTaskRequest(
+      runtime: WindowControlRuntime,
+      commandType: string,
+      payload: Extract<WebRemoteControlAppPayload, { requestId?: string }> & { zcode_type: string },
+      run: () => Promise<void>,
+    ): void {
+      const requestId = (payload as { requestId?: string }).requestId ?? "";
+      void authorizeOrReject(runtime, commandType, requestId, requestId).then((allowed) => {
+        if (!allowed) return;
+        void run().catch((error) => {
+          dependencies.logger.warn(
+            `[web-remote-control] task request failed window=${runtime.windowId} command=${commandType} error=${error instanceof Error ? error.message : String(error)}`,
+          );
+          sendAppPayload(runtime, {
+            zcode_type: "app-error",
+            requestId,
+            reason: "unexpected-error",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      });
+    }
+
+    async function handleTaskAppPayload(
+      runtime: WindowControlRuntime,
+      payload: WebRemoteControlTaskAppRequestPayload,
+    ): Promise<void> {
+      const facade = dependencies.taskFacade;
+      if (!facade) {
+        sendAppPayload(runtime, {
+          zcode_type: "app-error",
+          requestId: payload.requestId,
+          reason: "unsupported-action",
+          error: "task facade not available",
+        });
+        return;
+      }
+      switch (payload.zcode_type) {
+        case "task-list-request": {
+          const runs = await facade.taskList(payload.limit);
+          sendAppPayload(runtime, {
+            zcode_type: "task-list-response",
+            requestId: payload.requestId,
+            success: true,
+            result: { runs },
+          });
+          break;
+        }
+        case "run-summary-request": {
+          const summary = await facade.runSummary(payload.runId);
+          if (!summary) {
+            sendAppPayload(runtime, {
+              zcode_type: "app-error",
+              requestId: payload.requestId,
+              reason: "session-not-found",
+              error: `run not found: ${payload.runId}`,
+            });
+            break;
+          }
+          sendAppPayload(runtime, {
+            zcode_type: "run-summary-response",
+            requestId: payload.requestId,
+            success: true,
+            result: summary,
+          });
+          break;
+        }
+        case "run-events-request": {
+          const events = await facade.runEvents(
+            payload.runId,
+            payload.afterSequence,
+            payload.limit,
+          );
+          sendAppPayload(runtime, {
+            zcode_type: "run-events-response",
+            requestId: payload.requestId,
+            success: true,
+            result: { events },
+          });
+          break;
+        }
+        case "instruction-request":
+        case "approval-decision-request":
+        case "run-control-request":
+          // 执行类命令的 host 执行面随审批 UI 批次接入；本层不制造第二条命令写入路径。
+          sendAppPayload(runtime, {
+            zcode_type: "app-error",
+            requestId: payload.requestId,
+            reason: "unsupported-action",
+            error: "remote execution surface not available yet",
+          });
+          break;
+        default:
+          break;
+      }
+    }
+
+    // 授权门注入时数据类 payload 先过准入门（异步）；未注入（测试 double/旧 wire）
+    // 保持同步快路径，不改变既有时序语义。
+    if (dependencies.deviceGate) {
+      switch (payload.zcode_type) {
+        case "bootstrap-request":
+          void authorizeOrReject(
+            runtime,
+            "bootstrap_request",
+            payload.requestId,
+            payload.requestId,
+          ).then((allowed) => {
+            if (!allowed) return;
+            sendBootstrapResponse(runtime, payload.requestId);
+          });
+          return;
+        case "workspace-list-request":
+          void authorizeOrReject(
+            runtime,
+            "workspace_list",
+            payload.requestId,
+            payload.requestId,
+          ).then((allowed) => {
+            if (!allowed) return;
+            sendWorkspaceListResponse(runtime, payload.requestId);
+          });
+          return;
+        case "platform-request":
+          void authorizeOrReject(
+            runtime,
+            `platform_${payload.method}`,
+            payload.requestId,
+            `${payload.method}`,
+          ).then((allowed) => {
+            if (!allowed) return;
+            void respondToPlatformRequest(runtime, payload);
+          });
+          return;
+        case "workspace-bridge-open":
+          void authorizeOrReject(
+            runtime,
+            "workspace_bridge_open",
+            payload.requestId,
+            `${payload.bridgeSessionId}:${payload.workspaceKey}`,
+          ).then((allowed) => {
+            if (!allowed) return;
+            void respondToWorkspaceBridgeOpen(runtime, payload);
+          });
+          return;
+        case "workspace-reconnect-request":
+          void authorizeOrReject(
+            runtime,
+            "workspace_reconnect",
+            payload.requestId,
+            payload.requestId,
+          ).then((allowed) => {
+            if (!allowed) return;
+            void respondToWorkspaceReconnectRequest(runtime, payload);
+          });
+          return;
+        case "task-list-request":
+          routeTaskRequest(runtime, "task_list", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "run-summary-request":
+          routeTaskRequest(runtime, "run_summary", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "run-events-request":
+          routeTaskRequest(runtime, "run_events", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "instruction-request":
+          routeTaskRequest(runtime, "send_instruction", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "approval-decision-request":
+          routeTaskRequest(runtime, "approve_operation", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "run-control-request": {
+          const controlPayload = payload as WebRemoteControlRunControlRequestPayload;
+          routeTaskRequest(
+            runtime,
+            controlPayload.action === "cancel"
+              ? "cancel_run"
+              : controlPayload.action === "pause"
+                ? "pause_run"
+                : "resume_run",
+            payload,
+            () => handleTaskAppPayload(runtime, controlPayload),
+          );
+          return;
+        }
+        default:
+          break;
+      }
+    }
     switch (payload.zcode_type) {
       case "bootstrap-request":
-        sendAppPayload(runtime, {
-          zcode_type: "bootstrap-response",
-          requestId: payload.requestId,
-          success: true,
-          result: buildBootstrapResult(runtime),
-        });
+        sendBootstrapResponse(runtime, payload.requestId);
         break;
       case "workspace-list-request":
-        sendAppPayload(runtime, {
-          zcode_type: "workspace-list-response",
-          requestId: payload.requestId,
-          success: true,
-          result: buildWorkspaceListResult(runtime),
-        });
+        sendWorkspaceListResponse(runtime, payload.requestId);
         break;
       case "platform-request":
         void respondToPlatformRequest(runtime, payload);
@@ -1243,13 +1562,15 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         // 修复依据（安全审计 SR-01）：首次配对超出二维码 TTL，说明这组配对凭证
         // 已超出可信窗口（截图/历史链接仍可能落在他人手里）。这里作废凭证并
         // 拒绝本次配对，用户重新开启远控即可获得全新凭证与二维码。
-        void resetExternalRelayDeviceAuth(dependencies.authStorageProvider, dependencies.logger, "qr-expired").catch(
-          (error: unknown) => {
-            dependencies.logger.warn("[web-remote-control] expired QR auth cleanup failed", {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          },
-        );
+        void resetExternalRelayDeviceAuth(
+          dependencies.authStorageProvider,
+          dependencies.logger,
+          "qr-expired",
+        ).catch((error: unknown) => {
+          dependencies.logger.warn("[web-remote-control] expired QR auth cleanup failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
         const expiredDimensions = resolveRuntimeWorkspaceDimensions(runtime);
         reportRemoteUsageEvent(
           runtime.windowId,

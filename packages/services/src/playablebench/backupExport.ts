@@ -27,6 +27,7 @@ export const BACKUP_TABLES = [
   "pb_feed_metric_snapshots",
   "pb_workflow_templates",
   "pb_feed_summaries",
+  "pb_remote_devices",
   "tasks_schema_migration",
 ] as const;
 

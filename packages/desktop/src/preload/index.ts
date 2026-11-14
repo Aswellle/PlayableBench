@@ -291,6 +291,13 @@ contextBridge.exposeInMainWorld("zcode", {
   stopWebRemoteControl: (): Promise<void> =>
     ipcRenderer.invoke(PlatformChannels.StopWebRemoteControl),
   getWebRemoteControlStatus: () => ipcRenderer.invoke(PlatformChannels.GetWebRemoteControlStatus),
+  listRemoteDevices: () => ipcRenderer.invoke(PlatformChannels.ListRemoteDevices),
+  confirmRemoteDevice: (input: { deviceId: string; tier: string; expiresAt?: number }) =>
+    ipcRenderer.invoke(PlatformChannels.ConfirmRemoteDevice, input),
+  revokeRemoteDevice: (input: { deviceId: string; reason: string; windowId?: number }) =>
+    ipcRenderer.invoke(PlatformChannels.RevokeRemoteDevice, input),
+  revokeAllRemoteDevices: (input: { reason: string }) =>
+    ipcRenderer.invoke(PlatformChannels.RevokeAllRemoteDevices, input),
   onWebRemoteControlStatusChanged: (
     callback: (status: WebRemoteControlStatus) => void,
   ): (() => void) => {

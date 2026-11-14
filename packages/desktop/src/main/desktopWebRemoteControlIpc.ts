@@ -36,9 +36,33 @@ export interface WebRemoteControlIpcManager {
   getStatus(windowId: number): WebRemoteControlStatus;
 }
 
+/** 远程设备注册表窄接口（services RemoteDeviceGate 满足；spec 09 §4 设备管理）。 */
+export interface RemoteDeviceRegistryDependency {
+  listDevices(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      status: string;
+      tier: string;
+      deviceType?: string;
+      lastUsedAt?: number;
+      expiresAt?: number;
+      createdAt: number;
+    }>
+  >;
+  confirmDevice(
+    deviceId: string,
+    tier: "read_only" | "instruction" | "approver",
+    expiresAt?: number,
+  ): Promise<unknown>;
+  revokeDevice(deviceId: string, reason: string): Promise<unknown>;
+  revokeAllDevices(reason: string): Promise<number>;
+}
+
 interface WebRemoteControlIpcDependencies {
   reportRemoteUsageEvent: (rendererId: number, event: TelemetryEventPayload) => void;
   webRemoteControlManager: WebRemoteControlIpcManager;
+  deviceRegistry?: RemoteDeviceRegistryDependency;
 }
 
 function reportRemoteUsageEventSafely(
@@ -164,4 +188,55 @@ export function registerWebRemoteControlIpcHandlers(
       ? dependencies.webRemoteControlManager.getStatus(win.id)
       : { status: "idle" as const };
   });
+
+  ipcMain.handle(PlatformChannels.ListRemoteDevices, async () => {
+    const registry = dependencies.deviceRegistry;
+    return registry ? registry.listDevices() : [];
+  });
+
+  ipcMain.handle(
+    PlatformChannels.ConfirmRemoteDevice,
+    async (
+      _event,
+      input: {
+        deviceId: string;
+        tier: "read_only" | "instruction" | "approver";
+        expiresAt?: number;
+      },
+    ) => {
+      const registry = dependencies.deviceRegistry;
+      if (!registry) {
+        throw new Error("远程设备注册表不可用");
+      }
+      return registry.confirmDevice(input.deviceId, input.tier, input.expiresAt);
+    },
+  );
+
+  ipcMain.handle(
+    PlatformChannels.RevokeRemoteDevice,
+    async (_event, input: { deviceId: string; reason: string; windowId?: number }) => {
+      const registry = dependencies.deviceRegistry;
+      if (!registry) {
+        throw new Error("远程设备注册表不可用");
+      }
+      const device = await registry.revokeDevice(input.deviceId, input.reason);
+      // 撤销立即生效（spec 16 门禁）：同步停掉发起撤销窗口的远控运行时，
+      // 强制断开既有 WS（attachment 由 stop 释放）。
+      if (input.windowId !== undefined) {
+        await dependencies.webRemoteControlManager.stop(input.windowId);
+      }
+      return device;
+    },
+  );
+
+  ipcMain.handle(
+    PlatformChannels.RevokeAllRemoteDevices,
+    async (_event, input: { reason: string }) => {
+      const registry = dependencies.deviceRegistry;
+      if (!registry) {
+        throw new Error("远程设备注册表不可用");
+      }
+      return { revoked: await registry.revokeAllDevices(input.reason) };
+    },
+  );
 }

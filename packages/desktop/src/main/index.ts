@@ -64,6 +64,7 @@ import {
   normalizeRuntimeProcessEnv,
   setDataBaseDir,
 } from "@zcode/services/node";
+import { RemoteDeviceGate, RemoteTaskFacade, RunStoreConnection } from "@zcode/services/node";
 import {
   desktopMenuMessageIds,
   type Locale,
@@ -723,22 +724,27 @@ const appTelemetryCredentialService = createCredentialService();
 void migrateLegacyCredentialEntries({
   keys: [WEB_REMOTE_CONTROL_EXTERNAL_RELAY_PASS_HASH_CREDENTIAL_KEY],
   cipherProvider: webRemoteControlCipherProvider,
-}).then((result) => {
-  if (result.migrated.length > 0) {
-    logger.info("[credential] migrated legacy entries to OS secure storage", {
-      count: result.migrated.length,
-    });
-  }
-  for (const skip of result.skipped) {
-    if (skip.reason !== "missing" && skip.reason !== "already-migrated") {
-      logger.warn("[credential] legacy entry migration skipped", { key: skip.key, reason: skip.reason });
+})
+  .then((result) => {
+    if (result.migrated.length > 0) {
+      logger.info("[credential] migrated legacy entries to OS secure storage", {
+        count: result.migrated.length,
+      });
     }
-  }
-}).catch((error: unknown) => {
-  logger.warn("[credential] legacy entry migration failed", {
-    error: error instanceof Error ? error.message : String(error),
+    for (const skip of result.skipped) {
+      if (skip.reason !== "missing" && skip.reason !== "already-migrated") {
+        logger.warn("[credential] legacy entry migration skipped", {
+          key: skip.key,
+          reason: skip.reason,
+        });
+      }
+    }
+  })
+  .catch((error: unknown) => {
+    logger.warn("[credential] legacy entry migration failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   });
-});
 async function resolveCurrentZCodeEndpointOrigin() {
   return resolveZCodeEndpointOrigin({
     env: ZCODE_ENV,
@@ -943,6 +949,14 @@ let startupOpenWorkspaceRequest: ExplicitStartupWorkspaceRequest | null =
       ? { path: startupDeepLinkWorkspacePath, source: "deep-link" }
       : null;
 
+// 远程设备准入门与手机任务面共享的 tasks-index 连接（同一库文件，只读面）。
+const remoteControlDeviceConnection = (() => {
+  try {
+    return new RunStoreConnection();
+  } catch {
+    return null;
+  }
+})();
 const webRemoteControlManager = createWebRemoteControlManager({
   getEndpointUrls: async () => {
     const derived = buildZCodeEndpointUrls(await resolveCurrentZCodeEndpointOrigin(), {
@@ -990,6 +1004,12 @@ const webRemoteControlManager = createWebRemoteControlManager({
     },
   },
   featureGate: createWebRemoteControlFeatureGate(),
+  deviceGate: remoteControlDeviceConnection
+    ? new RemoteDeviceGate({ connection: remoteControlDeviceConnection })
+    : undefined,
+  taskFacade: remoteControlDeviceConnection
+    ? new RemoteTaskFacade({ connection: remoteControlDeviceConnection })
+    : undefined,
   logger,
   relayMessageLogger: webRemoteControlRelayLogger,
   platformHandlers: {
@@ -2491,6 +2511,9 @@ app.whenReady().then(async () => {
     },
     finalArmsCustomEventE2EEnabled: shouldEnableE2ETestBridge(process.env),
     webRemoteControlManager,
+    remoteDeviceRegistry: remoteControlDeviceConnection
+      ? new RemoteDeviceGate({ connection: remoteControlDeviceConnection })
+      : undefined,
     createRemoteWorkspaceSession: remoteSessionManager.createRemoteWorkspaceSession,
     getRemoteConnectionStats: remoteSessionManager.getRemoteConnectionStats,
     disposeRemoteWorkspaceSession: remoteSessionManager.disposeRemoteWorkspaceSession,

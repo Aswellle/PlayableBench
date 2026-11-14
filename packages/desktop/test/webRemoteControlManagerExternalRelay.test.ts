@@ -36,6 +36,7 @@ function createManagerHarness(options?: {
   featureEnabled?: boolean;
   delayReadyMs?: number;
   canSendPayload?: () => boolean;
+  deviceGate?: Parameters<typeof createWebRemoteControlManager>[0]["deviceGate"];
   storedAuth?: { deviceSid: string; passHash: string };
   startupRestoreContext?: NonNullable<AppSettings["webRemoteControlLastEnabledContext"]>;
   startupRestoreClearError?: Error;
@@ -126,6 +127,7 @@ function createManagerHarness(options?: {
       },
     },
     featureGate: createWebRemoteControlFeatureGate(options?.featureEnabled ?? true),
+    ...(options?.deviceGate ? { deviceGate: options.deviceGate } : {}),
     logger,
     platformHandlers: {
       isDockerAvailable: async () => true,
@@ -298,6 +300,59 @@ async function createPrimedRemoteTaskSyncHarness(
 }
 
 describe("createWebRemoteControlManager external relay", () => {
+  it("设备准入门拒绝未确认设备的数据访问并回显错误（spec 09 §4）", async () => {
+    const authorizeCommand = vi.fn(async () => ({ ok: false, rejection: "device_unconfirmed" }));
+    const settleCommand = vi.fn(async () => undefined);
+    const h = createManagerHarness({
+      deviceGate: {
+        authorizeCommand,
+        settleCommand,
+        ensureDeviceSession: vi.fn(async () => ({ confirmed: false })),
+      },
+    });
+    await h.manager.start(1, { workspacePath: localWorkspace.workspacePath });
+    h.deliverPayload({ zcode_type: "workspace-list-request", requestId: "list-denied" });
+    await vi.waitFor(() =>
+      expect(h.sentPayloads).toContainEqual(
+        expect.objectContaining({
+          zcode_type: "app-error",
+          requestId: "list-denied",
+          reason: "unsupported-action",
+        }),
+      ),
+    );
+    // 授权被拒：不产生 workspace-list-response，也不结算命令。
+    expect(h.sentPayloads.some((payload) => payload.zcode_type === "workspace-list-response")).toBe(
+      false,
+    );
+    expect(settleCommand).not.toHaveBeenCalled();
+    await h.manager.stop(1);
+  });
+
+  it("设备准入门放行后正常响应并结算命令", async () => {
+    const authorizeCommand = vi.fn(async () => ({ ok: true }));
+    const settleCommand = vi.fn(async () => undefined);
+    const h = createManagerHarness({
+      deviceGate: {
+        authorizeCommand,
+        settleCommand,
+        ensureDeviceSession: vi.fn(async () => ({ confirmed: true })),
+      },
+    });
+    await h.manager.start(1, { workspacePath: localWorkspace.workspacePath });
+    h.deliverPayload({ zcode_type: "bootstrap-request", requestId: "version-gated" });
+    await vi.waitFor(() =>
+      expect(h.sentPayloads).toContainEqual(
+        expect.objectContaining({ zcode_type: "bootstrap-response", requestId: "version-gated" }),
+      ),
+    );
+    expect(authorizeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ commandType: "bootstrap_request", requestId: "version-gated" }),
+    );
+    expect(settleCommand).toHaveBeenCalledWith("version-gated", '{"ok":true}');
+    await h.manager.stop(1);
+  });
+
   it("returns the desktop's own version before a workspace bridge is attached", async () => {
     const h = createManagerHarness();
     await h.manager.start(1, { workspacePath: localWorkspace.workspacePath });
@@ -1832,7 +1887,11 @@ describe("web remote control pairing security (QR TTL / revoke)", () => {
     const authorization = manager.authorizeStart(1, {
       workspacePath: localWorkspace.workspacePath,
     });
-    await manager.startAuthorized(1, { workspacePath: localWorkspace.workspacePath }, authorization);
+    await manager.startAuthorized(
+      1,
+      { workspacePath: localWorkspace.workspacePath },
+      authorization,
+    );
     const startCountAfterStart = transportStartCount();
 
     const status = await manager.revokePairingAuthorized(

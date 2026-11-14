@@ -33,10 +33,16 @@ export function createDesktopPlatform(options: {
     startWebRemoteControl: (context) => window.zcode.startWebRemoteControl(context),
     refreshWebRemoteControlPairing: (context) =>
       window.zcode.refreshWebRemoteControlPairing(context),
-    revokeWebRemoteControlPairing: (context) =>
-      window.zcode.revokeWebRemoteControlPairing(context),
+    revokeWebRemoteControlPairing: (context) => window.zcode.revokeWebRemoteControlPairing(context),
     stopWebRemoteControl: () => window.zcode.stopWebRemoteControl(),
     getWebRemoteControlStatus: () => window.zcode.getWebRemoteControlStatus(),
+    listRemoteDevices: () => window.zcode.listRemoteDevices?.() ?? Promise.resolve([]),
+    confirmRemoteDevice: (input) =>
+      window.zcode.confirmRemoteDevice?.(input) ?? Promise.resolve(null),
+    revokeRemoteDevice: (input) =>
+      window.zcode.revokeRemoteDevice?.(input) ?? Promise.resolve(null),
+    revokeAllRemoteDevices: (input) =>
+      window.zcode.revokeAllRemoteDevices?.(input) ?? Promise.resolve({ revoked: 0 }),
     onWebRemoteControlStatusChanged: (handler) =>
       window.zcode.onWebRemoteControlStatusChanged?.(handler) ?? (() => {}),
     disposeRemoteSession: (sessionId) => window.zcode.disposeRemoteSession(sessionId),

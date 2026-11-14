@@ -29,6 +29,10 @@ import {
   applyPlayableBenchWorkflowV8,
   PLAYABLEBENCH_WORKFLOW_V8_SQL,
 } from "#src/session/tasksDatabase/playablebench-workflow-v8.js";
+import {
+  applyPlayableBenchRemoteV9,
+  PLAYABLEBENCH_REMOTE_V9_SQL,
+} from "#src/session/tasksDatabase/playablebench-remote-v9.js";
 
 // 冻结历史列声明，不能以实时 Repo/schema 代替，否则新版构建会改变已应用 checksum。
 const columns = [
@@ -105,6 +109,10 @@ const definitions = [
     id: "0008_playablebench_workflow",
     checksumInput: [PLAYABLEBENCH_WORKFLOW_V8_SQL, "playablebench-workflow-v1"],
   },
+  {
+    id: "0009_playablebench_remote",
+    checksumInput: [PLAYABLEBENCH_REMOTE_V9_SQL, "playablebench-remote-v1"],
+  },
 ] as const;
 
 export function runTasksDatabaseMigrations(
@@ -159,6 +167,7 @@ export function runTasksDatabaseMigrations(
       else if (migration.id === "0006_fts_pb_notes_repoint") applyPlayableBenchFtsNotesFixV6(db);
       else if (migration.id === "0007_playablebench_feed") applyPlayableBenchFeedV7(db);
       else if (migration.id === "0008_playablebench_workflow") applyPlayableBenchWorkflowV8(db);
+      else if (migration.id === "0009_playablebench_remote") applyPlayableBenchRemoteV9(db);
       else db.exec(OFFICIAL_GLM_SELECTION_MIGRATION_SQL);
       migrationFacts.executedCount++;
       db.prepare("INSERT INTO tasks_schema_migration VALUES(?,?,?)").run(

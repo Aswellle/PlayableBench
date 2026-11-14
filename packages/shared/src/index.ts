@@ -93,6 +93,8 @@ export * from "./playablebench-domain.js";
 export * from "./playablebench-runs.js";
 export * from "./playablebench-feed.js";
 export * from "./playablebench-workflow.js";
+export * from "./playablebench-remote.js";
+export * from "./web-remote-control-tasks.js";
 export * from "./task-realtime-core.js";
 export * from "./remote-workspace-identity.js";
 export * from "./zcode-api-retry-status.js";

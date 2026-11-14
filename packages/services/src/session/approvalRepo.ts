@@ -76,7 +76,9 @@ export class ApprovalRepo {
     const limit = Math.max(1, Math.min(params?.limit ?? 200, 1000));
     const rows = params?.decision
       ? (this.getDatabase()
-          .prepare(`SELECT * FROM pb_approvals WHERE run_id = ? AND decision = ? ORDER BY created_at DESC LIMIT ?`)
+          .prepare(
+            `SELECT * FROM pb_approvals WHERE run_id = ? AND decision = ? ORDER BY created_at DESC LIMIT ?`,
+          )
           .all(runId, params.decision, limit) as unknown as ApprovalRow[])
       : (this.getDatabase()
           .prepare(`SELECT * FROM pb_approvals WHERE run_id = ? ORDER BY created_at DESC LIMIT ?`)
@@ -90,16 +92,37 @@ export class ApprovalRepo {
     decision: Exclude<PbApprovalDecision, "pending">,
     options?: { decidedBy?: string; decidedAt?: number; revokeReason?: string },
   ): Promise<PbApproval | null> {
+    await this.decideOnce(id, decision, options);
+    return this.get(id);
+  }
+
+  /**
+   * 并发安全的 compare-and-set 决策（spec 09 §7：手机与桌面审批同一 approval id，
+   * 并发决定只能有一个成功）：以 UPDATE 影响行数判定抢先结果。
+   */
+  async decideOnce(
+    id: string,
+    decision: Exclude<PbApprovalDecision, "pending">,
+    options?: { decidedBy?: string; decidedAt?: number; revokeReason?: string },
+  ): Promise<{ decided: boolean; approval: PbApproval | null }> {
     await this.connection.ensureReady();
     const now = options?.decidedAt ?? Date.now();
-    this.getDatabase()
+    const result = this.getDatabase()
       .prepare(
         `UPDATE pb_approvals
          SET decision = ?, decided_by = ?, decided_at = ?, revoke_reason = ?, updated_at = ?
          WHERE id = ? AND decision = 'pending'`,
       )
-      .run(decision, options?.decidedBy ?? null, now, options?.revokeReason ?? null, Date.now(), id);
-    return this.get(id);
+      .run(
+        decision,
+        options?.decidedBy ?? null,
+        now,
+        options?.revokeReason ?? null,
+        Date.now(),
+        id,
+      );
+    const decided = Number(result.changes ?? 0) > 0;
+    return { decided, approval: await this.get(id) };
   }
 
   /** 过期扫描：pending 且已过截止时间的审批标记 expired（spec 05 §9 审批过期）。 */
