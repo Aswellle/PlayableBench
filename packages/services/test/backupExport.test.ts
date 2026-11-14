@@ -48,7 +48,7 @@ describe("备份导出与恢复", () => {
     const file = await createBackupExport(connection, { appVersion: "2026.11.14-test" });
     expect(file.format).toBe("playablebench-backup-v1");
     expect(file.appVersion).toBe("2026.11.14-test");
-    expect(file.schemaVersion).toBe("0007_playablebench_feed");
+    expect(file.schemaVersion).toBe("0008_playablebench_workflow");
     const tables = file.contents.map((c) => c.table);
     expect(tables).toEqual([...BACKUP_TABLES]);
     expect(tables.some((t) => t.toLowerCase().includes("credential"))).toBe(false);
@@ -80,7 +80,7 @@ describe("备份导出与恢复", () => {
     expect(preview.valid).toBe(true);
     expect(preview.issues).toEqual([]);
     expect(preview.manifest.tables.find((t) => t.table === "pb_notes")?.rowCount).toBe(1);
-    expect(preview.targetSchemaVersion).toBe("0007_playablebench_feed");
+    expect(preview.targetSchemaVersion).toBe("0008_playablebench_workflow");
 
     // 未确认必须拒绝（spec 06 §5）。
     await expect(restoreBackup(file, target, { confirm: false })).rejects.toMatchObject({
