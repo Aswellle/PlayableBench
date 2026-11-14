@@ -57,7 +57,9 @@
 
 ## 6. CI 结论（回填）
 
-- 待推送后回填（以 run 记录为准）。
+- 提交 `7ef36c5b`（Phase 4 全量）首跑 run 43495126642 unit job 失败：`backupExport.test.ts` 断言账本末位仍指向 `0006_fts_pb_notes_repoint`，0007 落库后过期。修复 `f17d6e8c`（断言跟随账本末位语义，grep 全库确认无其他硬编码点；services 全量 268 文件 3058 用例本机回归全绿）。
+- 提交 `f17d6e8c` CI 孪生 run **43555867396 / 43556117080 三 job 全绿**。
+- **结论：CI PASS**（分支 phase4/information-radar，PR 合并以本报告为准）。
 
 ## 7. 已知问题与遗留
 
