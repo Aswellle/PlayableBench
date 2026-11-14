@@ -5,7 +5,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { hashPairingCredential, RemoteDeviceGate } from "#src/playablebench/remoteDeviceGate.js";
+import { RemoteDeviceGate } from "#src/playablebench/remoteDeviceGate.js";
+import { hashPairingCredential } from "@zcode/shared/node";
 import { RunStoreConnection } from "#src/session/runStoreConnection.js";
 
 const tempDirs: string[] = [];

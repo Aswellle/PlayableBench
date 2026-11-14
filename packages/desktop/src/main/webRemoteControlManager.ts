@@ -42,6 +42,7 @@ import {
   type TelemetryEventPayload,
   measureWebRemoteControlRpcRelayEnvelopeBytes,
 } from "@zcode/shared";
+import { hashPairingCredential } from "@zcode/shared/node";
 import {
   WebRemoteControlDeviceTransport,
   type WebRemoteControlDeviceTransportAuth,
@@ -132,6 +133,31 @@ interface WindowControlRuntime {
   mobileDisconnectGraceTimer?: ReturnType<typeof setTimeout>;
 }
 
+/**
+ * 远程设备准入门（spec 09 §4/§6、裁决 SR-04）：每条手机命令 Host 端重检
+ * 设备确认状态与 scope，requestId 幂等防重放。未接线时行为保持既有
+ * （测试 double / 旧 wire 不受影响）；生产由 desktop main 注入 services 实现。
+ */
+export interface WebRemoteControlDeviceGateDependency {
+  authorizeCommand(input: {
+    credentialHash: string;
+    commandType: string;
+    requestId: string;
+    payloadDigest: string;
+    sessionId?: string;
+  }): Promise<{
+    ok: boolean;
+    rejection?: string;
+    replayResult?: { resultJson?: string };
+  }>;
+  settleCommand(requestId: string, resultJson?: string): Promise<unknown>;
+  ensureDeviceSession(input: {
+    credentialHash: string;
+    deviceName?: string;
+    deviceType?: string;
+  }): Promise<{ confirmed: boolean }>;
+}
+
 interface WebRemoteControlManagerDependencies {
   getEndpointUrls?: () => Promise<ZCodeEndpointUrls> | ZCodeEndpointUrls;
   relayWsUrl: string;
@@ -152,6 +178,7 @@ interface WebRemoteControlManagerDependencies {
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
+  deviceGate?: WebRemoteControlDeviceGateDependency;
   relayMessageLogger?: {
     info: (...args: unknown[]) => void;
   };
@@ -1155,23 +1182,144 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     });
   }
 
+  function sendBootstrapResponse(runtime: WindowControlRuntime, requestId: string): void {
+    sendAppPayload(runtime, {
+      zcode_type: "bootstrap-response",
+      requestId,
+      success: true,
+      result: buildBootstrapResult(runtime),
+    });
+  }
+
+  function sendWorkspaceListResponse(runtime: WindowControlRuntime, requestId: string): void {
+    sendAppPayload(runtime, {
+      zcode_type: "workspace-list-response",
+      requestId,
+      success: true,
+      result: buildWorkspaceListResult(runtime),
+    });
+  }
+
+  /**
+   * 手机命令授权（spec 09 §4/§6、SR-04）：数据类 payload 先过设备准入门
+   * （确认状态/scope/requestId 幂等），拒绝或重放时回显错误响应，不再继续。
+   * 未接线 deviceGate 时保持既有行为（测试 double/旧 wire）。
+   */
+  async function authorizeOrReject(
+    runtime: WindowControlRuntime,
+    commandType: string,
+    requestId: string,
+    digestInput: string,
+  ): Promise<boolean> {
+    const gate = dependencies.deviceGate;
+    if (!gate) return true;
+    const result = await gate
+      .authorizeCommand({
+        credentialHash: hashPairingCredential(runtime.passHash),
+        commandType,
+        requestId,
+        payloadDigest: hashPairingCredential(digestInput),
+        sessionId: runtime.deviceSid,
+      })
+      .catch((error) => {
+        dependencies.logger.warn(
+          `[web-remote-control] device gate failed window=${runtime.windowId} error=${error instanceof Error ? error.message : String(error)}`,
+        );
+        return { ok: false, rejection: "gate_error" } as const;
+      });
+    if (result.ok && !result.replayResult) {
+      void gate.settleCommand(requestId, '{"ok":true}').catch(() => undefined);
+      return true;
+    }
+    if (result.ok && result.replayResult) {
+      // 重放：回显先前结果语义（拒绝新执行），不再走实际处理。
+      dependencies.logger.warn(
+        `[web-remote-control] replayed command window=${runtime.windowId} requestId=${requestId}`,
+      );
+    } else {
+      dependencies.logger.warn(
+        `[web-remote-control] command rejected window=${runtime.windowId} command=${commandType} reason=${result.rejection ?? "unknown"}`,
+      );
+    }
+    sendAppPayload(runtime, {
+      zcode_type: "app-error",
+      requestId,
+      reason: "unsupported-action",
+      error: `command rejected: ${result.rejection ?? "unknown"}`,
+    });
+    return false;
+  }
+
   function routePayload(runtime: WindowControlRuntime, payload: WebRemoteControlAppPayload): void {
+    // 授权门注入时数据类 payload 先过准入门（异步）；未注入（测试 double/旧 wire）
+    // 保持同步快路径，不改变既有时序语义。
+    if (dependencies.deviceGate) {
+      switch (payload.zcode_type) {
+        case "bootstrap-request":
+          void authorizeOrReject(
+            runtime,
+            "bootstrap_request",
+            payload.requestId,
+            payload.requestId,
+          ).then((allowed) => {
+            if (!allowed) return;
+            sendBootstrapResponse(runtime, payload.requestId);
+          });
+          return;
+        case "workspace-list-request":
+          void authorizeOrReject(
+            runtime,
+            "workspace_list",
+            payload.requestId,
+            payload.requestId,
+          ).then((allowed) => {
+            if (!allowed) return;
+            sendWorkspaceListResponse(runtime, payload.requestId);
+          });
+          return;
+        case "platform-request":
+          void authorizeOrReject(
+            runtime,
+            `platform_${payload.method}`,
+            payload.requestId,
+            `${payload.method}`,
+          ).then((allowed) => {
+            if (!allowed) return;
+            void respondToPlatformRequest(runtime, payload);
+          });
+          return;
+        case "workspace-bridge-open":
+          void authorizeOrReject(
+            runtime,
+            "workspace_bridge_open",
+            payload.requestId,
+            `${payload.bridgeSessionId}:${payload.workspaceKey}`,
+          ).then((allowed) => {
+            if (!allowed) return;
+            void respondToWorkspaceBridgeOpen(runtime, payload);
+          });
+          return;
+        case "workspace-reconnect-request":
+          void authorizeOrReject(
+            runtime,
+            "workspace_reconnect",
+            payload.requestId,
+            payload.requestId,
+          ).then((allowed) => {
+            if (!allowed) return;
+            void respondToWorkspaceReconnectRequest(runtime, payload);
+          });
+          return;
+        default:
+          break;
+      }
+    }
     switch (payload.zcode_type) {
       case "bootstrap-request":
-        sendAppPayload(runtime, {
-          zcode_type: "bootstrap-response",
-          requestId: payload.requestId,
-          success: true,
-          result: buildBootstrapResult(runtime),
-        });
+        sendBootstrapResponse(runtime, payload.requestId);
         break;
       case "workspace-list-request":
-        sendAppPayload(runtime, {
-          zcode_type: "workspace-list-response",
-          requestId: payload.requestId,
-          success: true,
-          result: buildWorkspaceListResult(runtime),
-        });
+        sendWorkspaceListResponse(runtime, payload.requestId);
         break;
       case "platform-request":
         void respondToPlatformRequest(runtime, payload);
@@ -1243,13 +1391,15 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         // 修复依据（安全审计 SR-01）：首次配对超出二维码 TTL，说明这组配对凭证
         // 已超出可信窗口（截图/历史链接仍可能落在他人手里）。这里作废凭证并
         // 拒绝本次配对，用户重新开启远控即可获得全新凭证与二维码。
-        void resetExternalRelayDeviceAuth(dependencies.authStorageProvider, dependencies.logger, "qr-expired").catch(
-          (error: unknown) => {
-            dependencies.logger.warn("[web-remote-control] expired QR auth cleanup failed", {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          },
-        );
+        void resetExternalRelayDeviceAuth(
+          dependencies.authStorageProvider,
+          dependencies.logger,
+          "qr-expired",
+        ).catch((error: unknown) => {
+          dependencies.logger.warn("[web-remote-control] expired QR auth cleanup failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
         const expiredDimensions = resolveRuntimeWorkspaceDimensions(runtime);
         reportRemoteUsageEvent(
           runtime.windowId,

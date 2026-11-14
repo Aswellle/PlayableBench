@@ -2901,3 +2901,4 @@ export async function disposeServiceResourcesAndWait(services: ServiceCollection
     .catch(() => {});
 }
 export { localRuntimeNetworkCapture } from "./zcode-agent/localRuntimeNetworkCapture.js";
+export { RemoteDeviceGate } from "./playablebench/remoteDeviceGate.js";

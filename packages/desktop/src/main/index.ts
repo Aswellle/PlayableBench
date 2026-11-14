@@ -64,6 +64,7 @@ import {
   normalizeRuntimeProcessEnv,
   setDataBaseDir,
 } from "@zcode/services/node";
+import { RemoteDeviceGate } from "@zcode/services/node";
 import {
   desktopMenuMessageIds,
   type Locale,
@@ -723,22 +724,27 @@ const appTelemetryCredentialService = createCredentialService();
 void migrateLegacyCredentialEntries({
   keys: [WEB_REMOTE_CONTROL_EXTERNAL_RELAY_PASS_HASH_CREDENTIAL_KEY],
   cipherProvider: webRemoteControlCipherProvider,
-}).then((result) => {
-  if (result.migrated.length > 0) {
-    logger.info("[credential] migrated legacy entries to OS secure storage", {
-      count: result.migrated.length,
-    });
-  }
-  for (const skip of result.skipped) {
-    if (skip.reason !== "missing" && skip.reason !== "already-migrated") {
-      logger.warn("[credential] legacy entry migration skipped", { key: skip.key, reason: skip.reason });
+})
+  .then((result) => {
+    if (result.migrated.length > 0) {
+      logger.info("[credential] migrated legacy entries to OS secure storage", {
+        count: result.migrated.length,
+      });
     }
-  }
-}).catch((error: unknown) => {
-  logger.warn("[credential] legacy entry migration failed", {
-    error: error instanceof Error ? error.message : String(error),
+    for (const skip of result.skipped) {
+      if (skip.reason !== "missing" && skip.reason !== "already-migrated") {
+        logger.warn("[credential] legacy entry migration skipped", {
+          key: skip.key,
+          reason: skip.reason,
+        });
+      }
+    }
+  })
+  .catch((error: unknown) => {
+    logger.warn("[credential] legacy entry migration failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   });
-});
 async function resolveCurrentZCodeEndpointOrigin() {
   return resolveZCodeEndpointOrigin({
     env: ZCODE_ENV,
@@ -990,6 +996,7 @@ const webRemoteControlManager = createWebRemoteControlManager({
     },
   },
   featureGate: createWebRemoteControlFeatureGate(),
+  deviceGate: new RemoteDeviceGate(),
   logger,
   relayMessageLogger: webRemoteControlRelayLogger,
   platformHandlers: {

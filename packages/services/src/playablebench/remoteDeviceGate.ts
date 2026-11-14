@@ -2,7 +2,7 @@
 // 命令重放与撤销立即生效"）。AuthZ+幂等一体化：每条命令先做 scope 重检
 // （不凭 relay 认证放行），再过 requestId 幂等账本；拒绝路径写安全事件。
 // 设备会话：以配对凭证哈希识别；未确认设备不产生任何数据访问。
-import { createHash } from "node:crypto";
+import { hashPairingCredential } from "@zcode/shared/node";
 import type { RemoteDevice, RemoteDeviceScope, RemoteDeviceTier } from "@zcode/shared";
 import { RemoteCommandLedgerRepo } from "#src/session/remoteCommandLedgerRepo.js";
 import { RemoteDeviceRepo } from "#src/session/remoteDeviceRepo.js";
@@ -43,6 +43,19 @@ const COMMAND_SCOPE_MAP: Readonly<Record<string, RemoteDeviceScope>> = {
   resume_run: "send_instruction",
   cancel_run: "cancel_run",
   manage_device: "manage_device",
+  // relay app payload 面（desktop manager 接线）：只读探测与配置读取按只读档；
+  // 产生临时附件/写桌面配置的动作为指令档。
+  bootstrap_request: "read_status",
+  workspace_bridge_open: "read_task",
+  workspace_reconnect: "read_task",
+  platform_isDockerAvailable: "read_status",
+  platform_listWSLDistros: "read_status",
+  platform_listDockerContainers: "read_status",
+  platform_listSSHConfigAliases: "read_status",
+  platform_loadMcpFromUserDirectory: "read_status",
+  platform_migrateLegacyCommonMcp: "read_status",
+  platform_createTempTextAttachment: "send_instruction",
+  platform_saveMcpToUserDirectory: "send_instruction",
 };
 
 export function resolveCommandScope(commandType: string): RemoteDeviceScope | null {
@@ -194,9 +207,4 @@ export class RemoteDeviceGate {
   async settleCommand(requestId: string, resultJson?: string) {
     return this.ledger.settle(requestId, { ...(resultJson !== undefined ? { resultJson } : {}) });
   }
-}
-
-/** 配对凭证哈希（不存原始 token，spec 06 §2）。 */
-export function hashPairingCredential(secret: string): string {
-  return createHash("sha256").update(secret).digest("hex");
 }
