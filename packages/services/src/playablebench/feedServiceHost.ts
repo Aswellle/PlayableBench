@@ -23,9 +23,14 @@ export interface FeedServiceHostOptions {
   /** 卡片转任务编排依赖（缺省 wire 进程默认 repo；注入便于测试与路径隔离）。 */
   inboxRepo?: InboxRepo;
   taskIndexRepo?: TaskIndexRepo;
+  /** 常驻调度轮询间隔（毫秒）；0 禁用（测试/不需要常驻的场景）。 */
+  schedulerPollIntervalMs?: number;
 }
 
-export function createFeedService(options: FeedServiceHostOptions = {}): IFeedService {
+/** 常驻调度句柄（Host 侧；renderer 代理面仍是纯 IFeedService）。 */
+export type FeedServiceHandle = IFeedService & { stopScheduler?(): void };
+
+export function createFeedService(options: FeedServiceHostOptions = {}): FeedServiceHandle {
   const connection = new RunStoreConnection(options.dbPath);
   const sources = new FeedSourceRepo(connection);
   const items = new FeedItemRepo(connection);
@@ -46,7 +51,7 @@ export function createFeedService(options: FeedServiceHostOptions = {}): IFeedSe
       taskIndexRepo,
     });
 
-  return {
+  const handle: FeedServiceHandle = {
     async addSource(input) {
       // 添加时即做 scheme/字面量地址校验（抓取时仍逐跳校验，本处是前置反馈）。
       let parsed: URL;
@@ -152,4 +157,31 @@ export function createFeedService(options: FeedServiceHostOptions = {}): IFeedSe
       return items.listMetrics(itemId);
     },
   };
+
+  // 常驻调度（spec 08 §5）：间隔扫描到期来源分批补采；无到期源时只做一次
+  // 本地查询、无网络动作。single-flight + 上一轮未结束跳过，不叠加抓取。
+  const pollIntervalMs = options.schedulerPollIntervalMs ?? 60_000;
+  if (pollIntervalMs > 0) {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let sweeping = false;
+    timer = setInterval(() => {
+      if (sweeping) return;
+      sweeping = true;
+      void scheduler
+        .refreshDueSources()
+        .catch(() => undefined)
+        .finally(() => {
+          sweeping = false;
+        });
+    }, pollIntervalMs);
+    // 不阻止宿主进程退出（utilityProcess/测试环境同样适用）。
+    timer.unref?.();
+    handle.stopScheduler = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+  }
+  return handle;
 }
