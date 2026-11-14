@@ -61,6 +61,9 @@ describe("DB109 App 库统一迁移", () => {
       "pb_notes",
       "pb_project_links",
       "pb_projects",
+      "pb_remote_command_ledger",
+      "pb_remote_devices",
+      "pb_remote_security_events",
       "pb_run_events",
       "pb_runs",
       "pb_tool_executions",
@@ -73,8 +76,8 @@ describe("DB109 App 库统一迁移", () => {
       "tasks_schema_migration",
     ]);
     const ledger = db.prepare("SELECT * FROM tasks_schema_migration").all();
-    // 0008 迁移（工作流/摘要域）加入账本后总数为 8。
-    expect(ledger).toHaveLength(8);
+    // 0009 迁移（远程设备域）加入账本后总数为 9。
+    expect(ledger).toHaveLength(9);
     runTasksDatabaseMigrations(db);
     expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toEqual(ledger);
   });
@@ -295,7 +298,7 @@ describe("DB109 App 库统一迁移", () => {
       Atomics.notify(new Int32Array(gate), 0);
       expect(await Promise.all(exits)).toEqual([[0], [0]]);
       // 0007 迁移（信息雷达域）加入账本后总数为 7。
-      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(8);
+      expect(db.prepare("SELECT * FROM tasks_schema_migration").all()).toHaveLength(9);
       expect(db.prepare("SELECT * FROM migration_probe").all()).toHaveLength(1);
       expect(db.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
     } finally {
