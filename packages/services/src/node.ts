@@ -376,6 +376,13 @@ import { createOnboardingRecordService } from "./onboarding/onboardingRecordServ
 import { createPlayableBenchService } from "./playablebench/playablebenchService.js";
 import { createFeedService } from "./playablebench/feedServiceHost.js";
 import { IFeedService } from "./playablebench/feedService.js";
+import { createResearchService } from "./playablebench/researchServiceHost.js";
+import { IResearchService } from "./playablebench/researchService.js";
+import { createAgentRuntimePort } from "./playablebench/agentRuntimePortAdapter.js";
+import { RunStoreConnection } from "./session/runStoreConnection.js";
+import { RunRepo } from "./session/runRepo.js";
+import { ToolExecutionRepo } from "./session/toolExecutionRepo.js";
+import { ApprovalRepo } from "./session/approvalRepo.js";
 import { IPlayableBenchService } from "./playablebench/playablebench.js";
 import { createLegacyTeamOrganizationResolver } from "./model-provider/legacyTeamOrganizationResolver.js";
 import { createObservableSettingService } from "./setting/observableSettingService.js";
@@ -2337,6 +2344,8 @@ export function createLocalServices(options: {
       credentials: await resolveOffPeakCredentials(offPeakCredentialResolverDeps),
       ticketId,
     });
+  // Run 域与研究工作流共享的 tasks-index 连接（RunRepo/ToolExecutionRepo/ApprovalRepo 同库）。
+  const pbAgentRuntimeConnection = new RunStoreConnection();
   const fileService = createFileService({
     workspaceFileSearchFilter: options?.workspaceFileSearchFilter,
   });
@@ -2404,6 +2413,18 @@ export function createLocalServices(options: {
     .register(IOnboardingRecordService, onboardingRecordService)
     .register(IPlayableBenchService, createPlayableBenchService())
     .register(IFeedService, createFeedService())
+    .register(
+      IResearchService,
+      createResearchService({
+        port: createAgentRuntimePort({
+          agentService: zcodeAgentService,
+          runRepo: new RunRepo(pbAgentRuntimeConnection),
+          toolExecutions: new ToolExecutionRepo(pbAgentRuntimeConnection),
+          approvals: new ApprovalRepo(pbAgentRuntimeConnection),
+        }),
+        connection: pbAgentRuntimeConnection,
+      }),
+    )
     .register(ICredentialService, credentialService)
     .register(IBroadcastService, broadcastService)
     .register(IZCodeTaskService, zcodeTaskService)

@@ -48,7 +48,7 @@ describe("备份导出与恢复", () => {
     const file = await createBackupExport(connection, { appVersion: "2026.11.14-test" });
     expect(file.format).toBe("playablebench-backup-v1");
     expect(file.appVersion).toBe("2026.11.14-test");
-    expect(file.schemaVersion).toBe("0007_playablebench_feed");
+    expect(file.schemaVersion).toBe("0008_playablebench_workflow");
     const tables = file.contents.map((c) => c.table);
     expect(tables).toEqual([...BACKUP_TABLES]);
     expect(tables.some((t) => t.toLowerCase().includes("credential"))).toBe(false);
@@ -62,25 +62,31 @@ describe("备份导出与恢复", () => {
     const source = makeConnection();
     await source.ensureReady();
     const sourceDb = source.getDatabase();
-    sourceDb.prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
-      VALUES ('note-1', '恢复验证', 'restore probe 恢复探针', 1, 1)`).run();
-    sourceDb.prepare(`INSERT INTO tasks (
+    sourceDb
+      .prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
+      VALUES ('note-1', '恢复验证', 'restore probe 恢复探针', 1, 1)`)
+      .run();
+    sourceDb
+      .prepare(`INSERT INTO tasks (
         workspace_key, workspace_path, task_id, title, mode, created_at, updated_at, searchable_text
-      ) VALUES ('ws', '/tmp/ws', 'task-keep', '保留任务', 'default', 1, 1, '正文')`).run();
+      ) VALUES ('ws', '/tmp/ws', 'task-keep', '保留任务', 'default', 1, 1, '正文')`)
+      .run();
     const file = await createBackupExport(source);
 
     // 目标库为全新空库（已迁移）：先写一条会被恢复覆盖清理的行。
     const target = makeConnection();
     await target.ensureReady();
     const targetDb = target.getDatabase();
-    targetDb.prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
-      VALUES ('note-stale', '将被清除', 'stale', 1, 1)`).run();
+    targetDb
+      .prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
+      VALUES ('note-stale', '将被清除', 'stale', 1, 1)`)
+      .run();
 
     const preview = await previewBackupImport(file, target);
     expect(preview.valid).toBe(true);
     expect(preview.issues).toEqual([]);
     expect(preview.manifest.tables.find((t) => t.table === "pb_notes")?.rowCount).toBe(1);
-    expect(preview.targetSchemaVersion).toBe("0007_playablebench_feed");
+    expect(preview.targetSchemaVersion).toBe("0008_playablebench_workflow");
 
     // 未确认必须拒绝（spec 06 §5）。
     await expect(restoreBackup(file, target, { confirm: false })).rejects.toMatchObject({
@@ -104,6 +110,53 @@ describe("备份导出与恢复", () => {
         WHERE fts_pb_notes MATCH 'restore'`)
       .all() as Array<{ id: string }>;
     expect(hit.map((r) => r.id)).toEqual(["note-1"]);
+  });
+
+  it("Feed/摘要/模板域表随备份导出并恢复；恢复后 feed FTS 可检索", async () => {
+    const source = makeConnection();
+    await source.ensureReady();
+    const sourceDb = source.getDatabase();
+    sourceDb
+      .prepare(
+        `INSERT INTO pb_feed_sources (id, connector_type, name, url, created_at, updated_at)
+       VALUES ('src-1', 'rss_atom', '源一', 'https://example.com/feed.xml', 1, 1)`,
+      )
+      .run();
+    sourceDb
+      .prepare(
+        `INSERT INTO pb_feed_items (id, source_id, canonical_url, original_url, title,
+         first_seen_at, last_seen_at, content_hash, created_at, updated_at)
+       VALUES ('item-1', 'src-1', 'https://example.com/a', 'https://example.com/a?utm=1',
+         '恢复探针文章', 1, 1, 'hash-1', 1, 1)`,
+      )
+      .run();
+    sourceDb
+      .prepare(
+        `INSERT INTO pb_workflow_templates (id, version, name, created_at)
+       VALUES ('research_article', 'v1', '研究一篇文章', 1)`,
+      )
+      .run();
+    const file = await createBackupExport(source);
+    expect(file.contents.find((c) => c.table === "pb_feed_items")?.rowCount).toBe(1);
+
+    const target = makeConnection();
+    await target.ensureReady();
+    const targetDb = target.getDatabase();
+    const result = await restoreBackup(file, target, { confirm: true });
+    expect(result.restoredTables).toContain("pb_feed_sources");
+    expect(result.restoredTables).toContain("pb_feed_items");
+    expect(result.restoredTables).toContain("pb_workflow_templates");
+    const items = targetDb.prepare(`SELECT title FROM pb_feed_items`).all() as Array<{
+      title: string;
+    }>;
+    expect(items.map((r) => r.title)).toEqual(["恢复探针文章"]);
+    // 恢复内置 feed FTS 重建：restore 后无需手动 rebuild 即可检索。
+    const hit = targetDb
+      .prepare(`SELECT pb_feed_items.id FROM fts_pb_feed_items
+        JOIN pb_feed_items ON pb_feed_items.rowid = fts_pb_feed_items.rowid
+        WHERE fts_pb_feed_items MATCH '探针文'`)
+      .all() as Array<{ id: string }>;
+    expect(hit.map((r) => r.id)).toEqual(["item-1"]);
   });
 
   it("篡改行内容后预览判定无效并拒绝恢复", async () => {

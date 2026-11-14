@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 import type { RunStoreConnection } from "#src/session/runStoreConnection.js";
 import { PLAYABLEBENCH_FTS_REBUILD_SQL } from "#src/session/tasksDatabase/playablebench-domain-v4.js";
+import { PB_FEED_FTS_REBUILD_SQL } from "#src/session/tasksDatabase/playablebench-feed-v7.js";
 
 export const BACKUP_FORMAT = "playablebench-backup-v1" as const;
 
@@ -21,6 +22,11 @@ export const BACKUP_TABLES = [
   "pb_projects",
   "pb_notes",
   "pb_project_links",
+  "pb_feed_sources",
+  "pb_feed_items",
+  "pb_feed_metric_snapshots",
+  "pb_workflow_templates",
+  "pb_feed_summaries",
   "tasks_schema_migration",
 ] as const;
 
@@ -59,9 +65,7 @@ type DatabaseRow = Record<string, unknown>;
 
 function hashRows(rows: Array<DatabaseRow>): string {
   // 行内容规范化哈希：键排序剔除 undefined，导出方与校验方共用同一函数。
-  const canonical = JSON.stringify(rows, (_key, value) =>
-    value === undefined ? null : value,
-  );
+  const canonical = JSON.stringify(rows, (_key, value) => (value === undefined ? null : value));
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -190,7 +194,9 @@ export async function restoreBackup(
         for (const row of content.rows as DatabaseRow[]) {
           insert.run(
             ...columns.map((column) =>
-              row[column] === undefined ? null : (row[column] as string | number | bigint | Buffer | null),
+              row[column] === undefined
+                ? null
+                : (row[column] as string | number | bigint | Buffer | null),
             ),
           );
         }
@@ -207,7 +213,9 @@ export async function restoreBackup(
     }
     throw error;
   }
-  // FTS 影子表未随备份导出；恢复后重建（幂等）。
+  // FTS 影子表未随备份导出；恢复后重建（幂等）。Feed 域有自己的 FTS 影子表，
+  // 恢复了 pb_feed_items 后同样需要重建，否则全文检索结果漂移。
   db.exec(PLAYABLEBENCH_FTS_REBUILD_SQL);
+  db.exec(PB_FEED_FTS_REBUILD_SQL);
   return { restoredTables, restoredRows };
 }

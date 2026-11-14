@@ -94,8 +94,8 @@ it("SILENTDB-01/02: reports maintenance separately and no migration for a prepar
       expect.objectContaining({
         migration: {
           kind: "initialize",
-          executedCount: 7,
-          committedCount: 7,
+          executedCount: 8,
+          committedCount: 8,
           lastAppliedMigrationId: null,
         },
       }),
@@ -104,7 +104,7 @@ it("SILENTDB-01/02: reports maintenance separately and no migration for a prepar
     await prepareTasksIndexStorage(path, (phase, migration) => second.push({ phase, migration }));
     expect(second.some((s) => s.phase === "migrating")).toBe(false);
     expect(second.at(-1)).toMatchObject({
-      migration: { lastAppliedMigrationId: "0007_playablebench_feed" },
+      migration: { lastAppliedMigrationId: "0008_playablebench_workflow" },
     });
     expect(second.some((s) => s.phase === "maintaining")).toBe(true);
     expect(second).toContainEqual(
@@ -135,8 +135,8 @@ it("retains committed facts if closing the migration connection fails", async ()
     expect(states.at(-1)).toMatchObject({
       migration: {
         kind: "initialize",
-        executedCount: 7,
-        committedCount: 7,
+        executedCount: 8,
+        committedCount: 8,
         lastAppliedMigrationId: null,
       },
     });
@@ -186,10 +186,10 @@ it("keeps the pre-upgrade task ledger ID after committing the remaining migratio
       phase: "ready",
       migration: {
         kind: "upgrade",
-        // 0003 删除后仅重放 0003（0004-0007 首轮已提交，跳过但末位作为账本返回）。
+        // 0003 删除后仅重放 0003（0004-0008 首轮已提交，跳过但末位作为账本返回）。
         executedCount: 1,
         committedCount: 1,
-        lastAppliedMigrationId: "0007_playablebench_feed",
+        lastAppliedMigrationId: "0008_playablebench_workflow",
       },
     });
   } finally {

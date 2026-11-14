@@ -52,6 +52,7 @@
 |---|---|---|---|
 | `packages/services/test/subagentRuntimeConfigWatcher.test.ts` | CI run 43073576994 首次执行失败（大小写改名后旧缓存条目清理断言），`gh run rerun --failed` 重跑通过；本地连跑 3/3 通过 | 文件监听（case-only rename）对 CI IO 时序敏感，六轮全量运行中首次出现 | 暂不豁免（保持覆盖）；再次复现即移入 CI 豁免清单并归因 |
 | （非测试文件）forks 池 worker 收尾崩溃 | CI run 43462093537：17902 用例全绿、0 测试失败，但 vitest 汇总 `Errors 1 error`——"Worker forks emitted error / Worker exited unexpectedly"，job 以 exit 1 失败；同 commit 孪生 run 43462103498 全绿 | forks 池 worker 在汇总后收尾阶段异常退出（Windows runner 环境级），非任何用例断言失败；与已修复的 EPERM rename 偶发（run 43295320919）是两类问题 | 属基础设施偶发，不豁免任何用例；判定以同 commit 的权威 run 为准。再次复现且无绿色孪生 run 时按 flake 处理并升级归因 |
+| `packages/services/test/settingService.test.ts` + `packages/services/test/subagentsService.test.ts`（3-5 用例） | 本机全量并发回归（2026-11-14，工作流闭环分支）两文件共 5 用例失败（rename 收口等待、subagent 模型覆盖持久化/禁用态保留）；两文件单独跑全部全绿，改动未触及对应域 | 全量并发下 FS/时序竞争（与已登记的 rename timing、subagentsSection 断言 flake 同模式）；非业务逻辑缺陷 | 暂不豁免（单独运行通过保持覆盖）；再次复现且单文件仍绿时按并发 flake 处理 |
 
 ## CI 最终状态（run `43108624641`，commit `6dc8110e`）
 

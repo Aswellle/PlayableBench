@@ -13,12 +13,22 @@ import {
   PLAYABLEBENCH_DOMAIN_V4_SQL,
   TASK_FIELDS_V4,
 } from "#src/session/tasksDatabase/playablebench-domain-v4.js";
-import { applyPlayableBenchRunsV5, PLAYABLEBENCH_RUNS_V5_SQL } from "#src/session/tasksDatabase/playablebench-runs-v5.js";
+import {
+  applyPlayableBenchRunsV5,
+  PLAYABLEBENCH_RUNS_V5_SQL,
+} from "#src/session/tasksDatabase/playablebench-runs-v5.js";
 import {
   applyPlayableBenchFtsNotesFixV6,
   PB_NOTES_FTS_FIX_SQL,
 } from "#src/session/tasksDatabase/playablebench-fts-notes-fix-v6.js";
-import { applyPlayableBenchFeedV7, PLAYABLEBENCH_FEED_V7_SQL } from "#src/session/tasksDatabase/playablebench-feed-v7.js";
+import {
+  applyPlayableBenchFeedV7,
+  PLAYABLEBENCH_FEED_V7_SQL,
+} from "#src/session/tasksDatabase/playablebench-feed-v7.js";
+import {
+  applyPlayableBenchWorkflowV8,
+  PLAYABLEBENCH_WORKFLOW_V8_SQL,
+} from "#src/session/tasksDatabase/playablebench-workflow-v8.js";
 
 // 冻结历史列声明，不能以实时 Repo/schema 代替，否则新版构建会改变已应用 checksum。
 const columns = [
@@ -91,6 +101,10 @@ const definitions = [
     id: "0007_playablebench_feed",
     checksumInput: [PLAYABLEBENCH_FEED_V7_SQL, "playablebench-feed-v1"],
   },
+  {
+    id: "0008_playablebench_workflow",
+    checksumInput: [PLAYABLEBENCH_WORKFLOW_V8_SQL, "playablebench-workflow-v1"],
+  },
 ] as const;
 
 export function runTasksDatabaseMigrations(
@@ -144,6 +158,7 @@ export function runTasksDatabaseMigrations(
       else if (migration.id === "0005_playablebench_runs") applyPlayableBenchRunsV5(db);
       else if (migration.id === "0006_fts_pb_notes_repoint") applyPlayableBenchFtsNotesFixV6(db);
       else if (migration.id === "0007_playablebench_feed") applyPlayableBenchFeedV7(db);
+      else if (migration.id === "0008_playablebench_workflow") applyPlayableBenchWorkflowV8(db);
       else db.exec(OFFICIAL_GLM_SELECTION_MIGRATION_SQL);
       migrationFacts.executedCount++;
       db.prepare("INSERT INTO tasks_schema_migration VALUES(?,?,?)").run(

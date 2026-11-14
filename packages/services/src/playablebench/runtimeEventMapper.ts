@@ -4,6 +4,7 @@
 // outcome.errors，不中断帧泵（重复投递由 (run_id, event_id) 唯一约束幂等吸收）。
 // 只处理已注册为 PB run 的会话（getRunBySessionId 未命中即跳过，不污染上游会话）。
 import type {
+  AssistantTextRow,
   ConversationDelta,
   ConversationSnapshot,
   SessionPhase,
@@ -28,7 +29,9 @@ const PHASE_TO_RUN_STATUS: Readonly<Record<SessionPhase, PbRunStatus | null>> = 
   error: "failed",
 };
 
-const TOOL_ROW_STATUS_TO_EXECUTION: Readonly<Record<ToolCallRow["status"], PbToolExecutionStatus | null>> = {
+const TOOL_ROW_STATUS_TO_EXECUTION: Readonly<
+  Record<ToolCallRow["status"], PbToolExecutionStatus | null>
+> = {
   inputStreaming: null,
   pendingApproval: "pending",
   running: "running",
@@ -36,6 +39,9 @@ const TOOL_ROW_STATUS_TO_EXECUTION: Readonly<Record<ToolCallRow["status"], PbToo
   error: "failed",
   cancelled: "cancelled",
 };
+
+/** message.final 捕获的正文限长（摘要提取只取尾部结论段；防止事件表膨胀）。 */
+const MESSAGE_FINAL_MAX_CHARS = 8000;
 
 export interface RuntimeEventMapperDeps {
   runRepo: RunRepo;
@@ -116,7 +122,12 @@ export class RuntimeEventMapper {
   /** permission 交互 → 审批建档（幂等：interaction_id 唯一）+ waiting_approval。 */
   private async ensureApprovalForInteraction(
     runId: string,
-    interaction: { interactionId: string; toolCallId?: string; toolName?: string; summary?: string },
+    interaction: {
+      interactionId: string;
+      toolCallId?: string;
+      toolName?: string;
+      summary?: string;
+    },
     toolRow: ToolCallRow | null,
     outcome: MapperOutcome,
   ): Promise<void> {
@@ -167,7 +178,12 @@ export class RuntimeEventMapper {
     if (!runId) return outcome;
     this.deps.onSnapshotRevision?.(runId, sessionId, snapshot.revision);
     try {
-      await this.applyControlPhase(runId, snapshot.control.phase, `evt:${runId}:phase:${snapshot.control.phase}:${snapshot.revision}`, outcome);
+      await this.applyControlPhase(
+        runId,
+        snapshot.control.phase,
+        `evt:${runId}:phase:${snapshot.control.phase}:${snapshot.revision}`,
+        outcome,
+      );
     } catch (error) {
       outcome.errors.push(`phase: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -176,9 +192,14 @@ export class RuntimeEventMapper {
       if (row.kind === "toolCall") rowsByIndex.set(row.rowId, row as ToolCallRow);
     }
     try {
-      const pendingPermissions = snapshot.pendingInteractions.filter((i) => i.kind === "permission");
+      const pendingPermissions = snapshot.pendingInteractions.filter(
+        (i) => i.kind === "permission",
+      );
       for (const interaction of pendingPermissions) {
-        const toolRow = interaction.anchorRowId !== null ? rowsByIndex.get(interaction.anchorRowId) ?? null : null;
+        const toolRow =
+          interaction.anchorRowId !== null
+            ? (rowsByIndex.get(interaction.anchorRowId) ?? null)
+            : null;
         const payload = interaction.payload;
         await this.ensureApprovalForInteraction(
           runId,
@@ -195,23 +216,77 @@ export class RuntimeEventMapper {
       if (pendingPermissions.length === 0) {
         const run = await this.deps.runRepo.getRun(runId);
         if (run?.status === "waiting_approval") {
-          await this.transition(runId, "running", `evt:${runId}:approval-cleared:${snapshot.revision}`, "v4 pending permission interactions cleared", outcome);
+          await this.transition(
+            runId,
+            "running",
+            `evt:${runId}:approval-cleared:${snapshot.revision}`,
+            "v4 pending permission interactions cleared",
+            outcome,
+          );
         }
       }
     } catch (error) {
-      outcome.errors.push(`interactions: ${error instanceof Error ? error.message : String(error)}`);
+      outcome.errors.push(
+        `interactions: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     for (const row of rowsByIndex.values()) {
       try {
         await this.applyToolRow(runId, row, outcome);
       } catch (error) {
-        outcome.errors.push(`toolRow ${row.toolCallId}: ${error instanceof Error ? error.message : String(error)}`);
+        outcome.errors.push(
+          `toolRow ${row.toolCallId}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    for (const row of snapshot.rows.window) {
+      if (row.kind === "assistantText") {
+        try {
+          await this.captureFinalMessage(runId, row as AssistantTextRow, outcome);
+        } catch (error) {
+          outcome.errors.push(
+            `assistantText ${String(row.rowId)}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
     }
     return outcome;
   }
 
-  private async applyToolRow(runId: string, row: ToolCallRow, outcome: MapperOutcome): Promise<void> {
+  /**
+   * assistantText 行完成态捕获（限长、非流式逐 chunk）：事件确定性 eventId
+   * （rowId 幂等），摘要提取从 pb_run_events 读最终回复（spec 08 §9 摘要可追溯）。
+   */
+  private async captureFinalMessage(
+    runId: string,
+    row: AssistantTextRow,
+    outcome: MapperOutcome,
+  ): Promise<void> {
+    if (row.state !== "complete" || !row.text) return;
+    const text =
+      row.text.length > MESSAGE_FINAL_MAX_CHARS
+        ? `${row.text.slice(0, MESSAGE_FINAL_MAX_CHARS)}…[截断]`
+        : row.text;
+    const eventId = `evt:${runId}:message-final:${row.rowId}`;
+    const result = await this.deps.runRepo.appendRunEvent(runId, {
+      eventId,
+      eventType: "message.final",
+      payloadJson: JSON.stringify({
+        rowId: row.rowId,
+        text,
+        ...(row.model ? { model: row.model } : {}),
+      }),
+    });
+    if (!result.deduplicated) {
+      outcome.applied.push({ eventId, disposition: "applied" });
+    }
+  }
+
+  private async applyToolRow(
+    runId: string,
+    row: ToolCallRow,
+    outcome: MapperOutcome,
+  ): Promise<void> {
     const status = TOOL_ROW_STATUS_TO_EXECUTION[row.status];
     if (!status) return;
     const existing = await this.deps.toolExecutions.findByIdempotencyKey(row.toolCallId);
@@ -223,7 +298,10 @@ export class RuntimeEventMapper {
           ...(row.endedAt ? { finishedAt: row.endedAt } : {}),
           ...(row.error ? { errorSummary: `${row.error.code}: ${row.error.message}` } : {}),
         });
-        outcome.applied.push({ eventId: `evt:${runId}:tool:${row.toolCallId}:${row.status}`, disposition: "applied" });
+        outcome.applied.push({
+          eventId: `evt:${runId}:tool:${row.toolCallId}:${row.status}`,
+          disposition: "applied",
+        });
       }
       return;
     }
@@ -245,7 +323,10 @@ export class RuntimeEventMapper {
       ...(row.endedAt ? { finishedAt: row.endedAt } : {}),
       ...(row.error ? { errorSummary: `${row.error.code}: ${row.error.message}` } : {}),
     });
-    outcome.applied.push({ eventId: `evt:${runId}:tool:${row.toolCallId}:${row.status}`, disposition: "applied" });
+    outcome.applied.push({
+      eventId: `evt:${runId}:tool:${row.toolCallId}:${row.status}`,
+      disposition: "applied",
+    });
   }
 
   /** 增量帧：state.updated 的 control/pendingInteractions + toolCall 行 upsert。 */
@@ -261,11 +342,18 @@ export class RuntimeEventMapper {
     for (const [index, delta] of deltas.entries()) {
       try {
         if (delta.op === "state.updated" && delta.patch.control) {
-          await this.applyControlPhase(runId, delta.patch.control.phase, `evt:${runId}:phase:${delta.patch.control.phase}:d${frameSeq + index}`, outcome);
+          await this.applyControlPhase(
+            runId,
+            delta.patch.control.phase,
+            `evt:${runId}:phase:${delta.patch.control.phase}:d${frameSeq + index}`,
+            outcome,
+          );
           continue;
         }
         if (delta.op === "state.updated" && delta.patch.pendingInteractions !== undefined) {
-          const pendingPermissions = delta.patch.pendingInteractions.filter((i) => i.kind === "permission");
+          const pendingPermissions = delta.patch.pendingInteractions.filter(
+            (i) => i.kind === "permission",
+          );
           for (const interaction of pendingPermissions) {
             const payload = interaction.payload;
             await this.ensureApprovalForInteraction(
@@ -282,11 +370,23 @@ export class RuntimeEventMapper {
           }
           continue;
         }
-        if ((delta.op === "row.appended" || delta.op === "row.upserted") && delta.row.kind === "toolCall") {
+        if (
+          (delta.op === "row.appended" || delta.op === "row.upserted") &&
+          delta.row.kind === "toolCall"
+        ) {
           await this.applyToolRow(runId, delta.row as ToolCallRow, outcome);
+          continue;
+        }
+        if (
+          (delta.op === "row.appended" || delta.op === "row.upserted") &&
+          delta.row.kind === "assistantText"
+        ) {
+          await this.captureFinalMessage(runId, delta.row as AssistantTextRow, outcome);
         }
       } catch (error) {
-        outcome.errors.push(`delta[${index}] ${delta.op}: ${error instanceof Error ? error.message : String(error)}`);
+        outcome.errors.push(
+          `delta[${index}] ${delta.op}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
     return outcome;

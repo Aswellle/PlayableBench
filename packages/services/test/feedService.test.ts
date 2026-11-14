@@ -28,7 +28,13 @@ const RSS_BODY = `<?xml version="1.0"?><rss version="2.0"><channel><title>测试
 <description>摘要一</description></item>
 </channel></rss>`;
 
-function makeHarness(handler: (request: import("node:http").IncomingMessage, response: import("node:http").ServerResponse) => void) {
+function makeHarness(
+  handler: (
+    request: import("node:http").IncomingMessage,
+    response: import("node:http").ServerResponse,
+  ) => void,
+  options?: { schedulerPollIntervalMs?: number },
+) {
   const { createServer } = require("node:http") as typeof import("node:http");
   const { once } = require("node:events") as typeof import("node:events");
   const server = createServer(handler);
@@ -60,11 +66,19 @@ function makeHarness(handler: (request: import("node:http").IncomingMessage, res
       real.hostname = "127.0.0.1";
       real.port = String(address.port);
       const { guardedFetch } = await import("#src/playablebench/fetchGuard.js");
-      const response = await guardedFetch(real.toString(), { allowLoopback: true, maxBytes: 2 * 1024 * 1024 });
+      const response = await guardedFetch(real.toString(), {
+        allowLoopback: true,
+        maxBytes: 2 * 1024 * 1024,
+      });
       if (response.status !== 200) {
-        return { status: "failed" as const, httpStatus: response.status, errorCode: `http_${response.status}` };
+        return {
+          status: "failed" as const,
+          httpStatus: response.status,
+          errorCode: `http_${response.status}`,
+        };
       }
-      const { parseFeedDocument, FeedParseError } = await import("#src/playablebench/feedParser.js");
+      const { parseFeedDocument, FeedParseError } =
+        await import("#src/playablebench/feedParser.js");
       try {
         const parsed = parseFeedDocument(response.bodyText);
         return { status: "fetched" as const, httpStatus: 200, items: parsed.items };
@@ -76,7 +90,13 @@ function makeHarness(handler: (request: import("node:http").IncomingMessage, res
       }
     },
   };
-  const service = createFeedService({ dbPath, connector });
+  const service = createFeedService({
+    dbPath,
+    connector,
+    ...(options?.schedulerPollIntervalMs !== undefined
+      ? { schedulerPollIntervalMs: options.schedulerPollIntervalMs }
+      : {}),
+  });
   return { service, server, dbPath };
 }
 
@@ -137,6 +157,63 @@ describe("IFeedService 服务面", () => {
     const removed = await service.removeSource(source.id);
     expect(removed).toBe(true);
     expect(await service.listCards()).toHaveLength(0);
+  });
+
+  it("卡片转任务：逐字入 Inbox 后转任务；重复触发幂等复用（spec 16 门禁）", async () => {
+    const { service, dbPath } = makeHarness((request, response) => {
+      response.writeHead(200);
+      response.end(RSS_BODY);
+    });
+    const source = await service.addSource({ url: "https://blog.example.com/feed.xml" });
+    await service.refreshSource(source.id);
+    const cards = await service.listCards();
+    const card = cards[0]!;
+
+    const first = await service.convertCardToTask({
+      cardId: card.id,
+      workspacePath: "/tmp/ws",
+      priority: "high",
+    });
+    expect(first.reused).toBe(false);
+    expect(first.task?.title).toBe("第一条");
+    expect(first.task?.priority).toBe("high");
+
+    // 重复触发：同卡片原始 URL 已成功转换 → 幂等复用同一任务。
+    const second = await service.convertCardToTask({ cardId: card.id, workspacePath: "/tmp/ws" });
+    expect(second.reused).toBe(true);
+    expect(second.task?.taskId).toBe(first.task?.taskId);
+
+    // Inbox 原始输入逐字保留（标题 + 原文 URL 两行）；经独立实例读同一库文件。
+    const { InboxRepo } = await import("#src/session/inboxRepo.js");
+    const probeRepo = new InboxRepo(dbPath);
+    const probe = await probeRepo.get(first.inboxItemId);
+    expect(probe?.rawInput).toBe(`第一条\n${card.originalUrl}`);
+    expect(probe?.sourceUrl).toBe(card.originalUrl);
+
+    await expect(
+      service.convertCardToTask({ cardId: "missing", workspacePath: "/tmp/ws" }),
+    ).rejects.toMatchObject({ kind: "card_not_found" });
+  });
+
+  it("常驻调度：到期来源自动补采；stopScheduler 停止", async () => {
+    const { service, server } = makeHarness(
+      (request, response) => {
+        response.writeHead(200);
+        response.end(RSS_BODY);
+      },
+      { schedulerPollIntervalMs: 15 },
+    );
+    void server;
+    try {
+      const source = await service.addSource({ url: "https://blog.example.com/feed.xml" });
+      // 等待若干个 tick 内完成自动扫描入库。
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const counts = await service.getCardCounts();
+      expect(counts.total).toBeGreaterThanOrEqual(1);
+      void source;
+    } finally {
+      (service as { stopScheduler?(): void }).stopScheduler?.();
+    }
   });
 
   it("抓取失败：状态/错误码返回，旧内容保留（spec 16 门禁）", async () => {

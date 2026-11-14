@@ -179,6 +179,8 @@ export const ServiceChannels = {
   PlayableBench: "playablebench",
   /** PlayableBench 信息雷达服务（FeedSource/卡片/收藏，Phase 4） */
   Feed: "feed",
+  /** PlayableBench 研究工作流服务（卡片→Agent 研究运行，模板/摘要） */
+  Research: "research",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];

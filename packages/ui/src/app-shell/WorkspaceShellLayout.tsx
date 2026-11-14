@@ -2221,7 +2221,7 @@ export const WorkspaceShellLayout = memo(
                           ) : workspaceMainView === "inbox" ? (
                             <InboxView workspacePath={workspaceAbsPath} />
                           ) : (
-                            <RadarView />
+                            <RadarView workspacePath={workspaceAbsPath} />
                           )}
                         </ScopedErrorBoundary>
                       </div>

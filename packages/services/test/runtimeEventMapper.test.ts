@@ -42,7 +42,8 @@ function makeStore() {
     runRepo,
     toolExecutions,
     approvals,
-    onSnapshotRevision: (runId, sessionId, revision) => revisions.push({ runId, sessionId, revision }),
+    onSnapshotRevision: (runId, sessionId, revision) =>
+      revisions.push({ runId, sessionId, revision }),
   });
   return { mapper, runRepo, toolExecutions, approvals, revisions, connection };
 }
@@ -92,7 +93,11 @@ function makeSnapshot(overrides?: {
     backgroundWorks: [],
     goal: null,
     plan: null,
-    rows: { window: overrides?.toolRows ?? [], totalCount: overrides?.toolRows?.length ?? 0, firstRowId: null },
+    rows: {
+      window: overrides?.toolRows ?? [],
+      totalCount: overrides?.toolRows?.length ?? 0,
+      firstRowId: null,
+    },
   });
 }
 
@@ -133,7 +138,10 @@ describe("RuntimeEventMapper", () => {
   it("非 PB 会话跳过；PB run 相位迁移 + revision 回调", async () => {
     const { mapper, runRepo, revisions } = makeStore();
     // 未注册会话：不产生任何迁移。
-    const stranger = await mapper.applySnapshot("sess-stranger", makeSnapshot({ sessionId: "sess-stranger" }));
+    const stranger = await mapper.applySnapshot(
+      "sess-stranger",
+      makeSnapshot({ sessionId: "sess-stranger" }),
+    );
     expect(stranger.applied).toHaveLength(0);
 
     const run = await runRepo.createRun({ goal: "目标" });
@@ -154,7 +162,10 @@ describe("RuntimeEventMapper", () => {
     await runRepo.setRuntimeSession(run.id, "sess-1");
     await runRepo.transitionRun(run.id, { from: "queued", to: "running", eventId: "evt-r" });
 
-    const snapshot = makeSnapshot({ pendingInteractions: [permissionInteraction], toolRows: [pendingBashRow] });
+    const snapshot = makeSnapshot({
+      pendingInteractions: [permissionInteraction],
+      toolRows: [pendingBashRow],
+    });
     const first = await mapper.applySnapshot("sess-1", snapshot);
     expect(first.errors).toEqual([]);
     const afterFirst = await runRepo.getRun(run.id);
@@ -167,7 +178,10 @@ describe("RuntimeEventMapper", () => {
     expect(execution?.inputDigest).toBe(approval?.operationDigest);
 
     // 重放同一快照：interactionId/幂等键吸收，不产生第二条审批或执行。
-    const replay = await mapper.applySnapshot("sess-1", { ...snapshot, revision: snapshot.revision + 1 });
+    const replay = await mapper.applySnapshot("sess-1", {
+      ...snapshot,
+      revision: snapshot.revision + 1,
+    });
     expect(replay.errors).toEqual([]);
     expect((await approvals.list(run.id)).length).toBe(1);
     expect((await toolExecutions.list(run.id)).length).toBe(1);
@@ -180,7 +194,10 @@ describe("RuntimeEventMapper", () => {
     const run = await runRepo.createRun({ goal: "目标" });
     await runRepo.setRuntimeSession(run.id, "sess-1");
     await runRepo.transitionRun(run.id, { from: "queued", to: "running", eventId: "evt-r" });
-    await mapper.applySnapshot("sess-1", makeSnapshot({ pendingInteractions: [permissionInteraction], toolRows: [pendingBashRow] }));
+    await mapper.applySnapshot(
+      "sess-1",
+      makeSnapshot({ pendingInteractions: [permissionInteraction], toolRows: [pendingBashRow] }),
+    );
     await mapper.applySnapshot("sess-1", makeSnapshot({ revision: 9 }));
     expect((await runRepo.getRun(run.id))?.status).toBe("running");
     expect(await approvals.findByInteractionId("ia-1")).not.toBeNull();
@@ -216,7 +233,13 @@ describe("RuntimeEventMapper", () => {
     expect(done?.status).toBe("success");
     expect(done?.sideEffectState).toBe("confirmed");
 
-    const errorRow = { ...successRow, rowId: 3, toolCallId: "tc-3", status: "error" as const, error: { code: "tool_failed", message: "写入失败" } };
+    const errorRow = {
+      ...successRow,
+      rowId: 3,
+      toolCallId: "tc-3",
+      status: "error" as const,
+      error: { code: "tool_failed", message: "写入失败" },
+    };
     await mapper.applySnapshot("sess-1", makeSnapshot({ toolRows: [errorRow], revision: 4 }));
     const failedExec = await toolExecutions.findByIdempotencyKey("tc-3");
     expect(failedExec?.status).toBe("failed");
@@ -231,14 +254,47 @@ describe("RuntimeEventMapper", () => {
     const run = await runRepo.createRun({ goal: "目标" });
     await runRepo.setRuntimeSession(run.id, "sess-1");
 
-    await mapper.applyDeltas("sess-1", [
-      { op: "state.updated", patch: { control: { phase: "running", sessionEnded: false, canStop: true, stopState: "idle", stopTargetKind: "assistant", activeWorks: [], lastError: null, apiRetry: null } } },
-    ], { frameSeq: 1 });
+    await mapper.applyDeltas(
+      "sess-1",
+      [
+        {
+          op: "state.updated",
+          patch: {
+            control: {
+              phase: "running",
+              sessionEnded: false,
+              canStop: true,
+              stopState: "idle",
+              stopTargetKind: "assistant",
+              activeWorks: [],
+              lastError: null,
+              apiRetry: null,
+            },
+          },
+        },
+      ],
+      { frameSeq: 1 },
+    );
     expect((await runRepo.getRun(run.id))?.status).toBe("running");
 
-    await mapper.applyDeltas("sess-1", [
-      { op: "row.upserted", row: { ...pendingBashRow, rowId: 5, turnId: "turn-3", createdAt: 3, createdAtSeq: 3, status: "success" as const, endedAt: 9 } },
-    ], { frameSeq: 2 });
+    await mapper.applyDeltas(
+      "sess-1",
+      [
+        {
+          op: "row.upserted",
+          row: {
+            ...pendingBashRow,
+            rowId: 5,
+            turnId: "turn-3",
+            createdAt: 3,
+            createdAtSeq: 3,
+            status: "success" as const,
+            endedAt: 9,
+          },
+        },
+      ],
+      { frameSeq: 2 },
+    );
     const execution = await toolExecutions.findByIdempotencyKey("tc-1");
     expect(execution?.status).toBe("success");
     expect(execution?.sideEffectState).toBe("confirmed");
@@ -248,8 +304,59 @@ describe("RuntimeEventMapper", () => {
     const { mapper, runRepo } = makeStore();
     const run = await runRepo.createRun({ goal: "目标" });
     await runRepo.setRuntimeSession(run.id, "sess-1");
-    const outcome = await mapper.applySnapshot("sess-1", makeSnapshot({ phase: "completedSuccess" }));
+    const outcome = await mapper.applySnapshot(
+      "sess-1",
+      makeSnapshot({ phase: "completedSuccess" }),
+    );
     expect(outcome.errors.some((e) => e.includes("illegal transition"))).toBe(true);
     expect((await runRepo.getRun(run.id))?.status).toBe("queued");
+  });
+
+  it("assistantText 完成态捕获 message.final（限长）；重放幂等；流式/空文本不落", async () => {
+    const { mapper, runRepo } = makeStore();
+    const run = await runRepo.createRun({ goal: "目标" });
+    await runRepo.setRuntimeSession(run.id, "sess-1");
+    const longText = "结论。引用 https://example.com/src。".padEnd(9000, "尾");
+    const assistantRow = {
+      rowId: 7,
+      turnId: "turn-9",
+      createdAt: 9,
+      createdAtSeq: 9,
+      kind: "assistantText" as const,
+      text: longText,
+      state: "complete" as const,
+      model: "glm-test",
+    };
+    await mapper.applySnapshot("sess-1", makeSnapshot({ toolRows: [assistantRow] }));
+    let events = await runRepo.listRunEvents(run.id, { limit: 50 });
+    const final = events.filter((e) => e.eventType === "message.final");
+    expect(final).toHaveLength(1);
+    const payload = JSON.parse(final[0]?.payloadJson ?? "{}") as { text: string; model: string };
+    expect(payload.text.startsWith("结论。")).toBe(true);
+    expect(payload.text.endsWith("…[截断]")).toBe(true);
+    expect(payload.model).toBe("glm-test");
+
+    // 重放同快照：确定性 eventId 幂等吸收，不产生第二条。
+    await mapper.applySnapshot("sess-1", makeSnapshot({ toolRows: [assistantRow] }));
+    events = await runRepo.listRunEvents(run.id, { limit: 50 });
+    expect(events.filter((e) => e.eventType === "message.final")).toHaveLength(1);
+
+    // 流式行与空文本不落事件。
+    await mapper.applyDeltas(
+      "sess-1",
+      [
+        {
+          op: "row.appended",
+          row: { ...assistantRow, rowId: 8, text: "半截", state: "streaming" as const },
+        },
+        {
+          op: "row.appended",
+          row: { ...assistantRow, rowId: 9, text: "", state: "complete" as const },
+        },
+      ],
+      { frameSeq: 1 },
+    );
+    events = await runRepo.listRunEvents(run.id, { limit: 50 });
+    expect(events.filter((e) => e.eventType === "message.final")).toHaveLength(1);
   });
 });

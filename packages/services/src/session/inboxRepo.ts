@@ -6,11 +6,7 @@ import { mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import type {
-  InboxCaptureInput,
-  InboxItem,
-  InboxItemStatus,
-} from "@zcode/shared";
+import type { InboxCaptureInput, InboxItem, InboxItemStatus } from "@zcode/shared";
 import { getTasksIndexDatabasePath } from "#src/paths.js";
 import { runTasksDatabaseMigrations } from "#src/session/tasksDatabase/migrations.js";
 import { isTasksStoragePrepared } from "#src/session/tasksDatabase/prepared.js";
@@ -131,6 +127,19 @@ export class InboxRepo {
     return item;
   }
 
+  /** 按来源 URL 查找已成功转出任务的最近条目（卡片转任务幂等复用，spec 16 门禁）。 */
+  async findConvertedBySourceUrl(sourceUrl: string): Promise<InboxItem | null> {
+    await this.ensureReady();
+    const row = this.getDatabase()
+      .prepare(
+        `SELECT * FROM pb_inbox_items
+         WHERE source_url = ? AND task_id IS NOT NULL
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(sourceUrl) as InboxRow | undefined;
+    return row ? rowToItem(row) : null;
+  }
+
   async list(params?: { status?: InboxItemStatus; limit?: number }): Promise<InboxItem[]> {
     await this.ensureReady();
     const limit = Math.max(1, Math.min(params?.limit ?? 100, 500));
@@ -146,9 +155,9 @@ export class InboxRepo {
 
   async get(id: string): Promise<InboxItem | null> {
     await this.ensureReady();
-    const row = this.getDatabase()
-      .prepare(`SELECT * FROM pb_inbox_items WHERE id = ?`)
-      .get(id) as InboxRow | undefined;
+    const row = this.getDatabase().prepare(`SELECT * FROM pb_inbox_items WHERE id = ?`).get(id) as
+      | InboxRow
+      | undefined;
     return row ? rowToItem(row) : null;
   }
 
