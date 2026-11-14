@@ -181,6 +181,8 @@ export const ServiceChannels = {
   Feed: "feed",
   /** PlayableBench 研究工作流服务（卡片→Agent 研究运行，模板/摘要） */
   Research: "research",
+  /** PB Agent 运行控制与审批（桌面审批面板/手机审批卡片共用决策路径） */
+  AgentRunControl: "agent-run-control",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];

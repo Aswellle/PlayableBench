@@ -377,6 +377,8 @@ import { createPlayableBenchService } from "./playablebench/playablebenchService
 import { createFeedService } from "./playablebench/feedServiceHost.js";
 import { IFeedService } from "./playablebench/feedService.js";
 import { createResearchService } from "./playablebench/researchServiceHost.js";
+import { IAgentRunControlService } from "./playablebench/agentRunControl.js";
+import { createAgentRunControlService } from "./playablebench/agentRunControlHost.js";
 import { IResearchService } from "./playablebench/researchService.js";
 import { createAgentRuntimePort } from "./playablebench/agentRuntimePortAdapter.js";
 import { RunStoreConnection } from "./session/runStoreConnection.js";
@@ -2346,6 +2348,12 @@ export function createLocalServices(options: {
     });
   // Run 域与研究工作流共享的 tasks-index 连接（RunRepo/ToolExecutionRepo/ApprovalRepo 同库）。
   const pbAgentRuntimeConnection = new RunStoreConnection();
+  const pbAgentRuntimePort = createAgentRuntimePort({
+    agentService: zcodeAgentService,
+    runRepo: new RunRepo(pbAgentRuntimeConnection),
+    toolExecutions: new ToolExecutionRepo(pbAgentRuntimeConnection),
+    approvals: new ApprovalRepo(pbAgentRuntimeConnection),
+  });
   const fileService = createFileService({
     workspaceFileSearchFilter: options?.workspaceFileSearchFilter,
   });
@@ -2415,13 +2423,12 @@ export function createLocalServices(options: {
     .register(IFeedService, createFeedService())
     .register(
       IResearchService,
-      createResearchService({
-        port: createAgentRuntimePort({
-          agentService: zcodeAgentService,
-          runRepo: new RunRepo(pbAgentRuntimeConnection),
-          toolExecutions: new ToolExecutionRepo(pbAgentRuntimeConnection),
-          approvals: new ApprovalRepo(pbAgentRuntimeConnection),
-        }),
+      createResearchService({ port: pbAgentRuntimePort, connection: pbAgentRuntimeConnection }),
+    )
+    .register(
+      IAgentRunControlService,
+      createAgentRunControlService({
+        port: pbAgentRuntimePort,
         connection: pbAgentRuntimeConnection,
       }),
     )
