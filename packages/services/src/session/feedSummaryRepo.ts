@@ -79,14 +79,18 @@ export class FeedSummaryRepo {
       .prepare(
         `SELECT * FROM pb_feed_summaries WHERE feed_item_id = ? AND model = ? AND model_version = ?`,
       )
-      .get(params.feedItemId, params.model, params.modelVersion) as unknown as SummaryRow | undefined;
+      .get(params.feedItemId, params.model, params.modelVersion) as unknown as
+      | SummaryRow
+      | undefined;
     if (direct) return rowToSummary(direct);
     if (!params.contentHash) return null;
     const byHash = db
       .prepare(
         `SELECT * FROM pb_feed_summaries WHERE content_hash = ? AND model = ? AND model_version = ?`,
       )
-      .get(params.contentHash, params.model, params.modelVersion) as unknown as SummaryRow | undefined;
+      .get(params.contentHash, params.model, params.modelVersion) as unknown as
+      | SummaryRow
+      | undefined;
     return byHash ? rowToSummary(byHash) : null;
   }
 
@@ -121,12 +125,17 @@ export class FeedSummaryRepo {
       input.runId ?? null,
       now,
     );
-    const row = db.prepare(`SELECT * FROM pb_feed_summaries WHERE id = ?`).get(id) as unknown as SummaryRow;
+    const row = db
+      .prepare(`SELECT * FROM pb_feed_summaries WHERE id = ?`)
+      .get(id) as unknown as SummaryRow;
     return { summary: rowToSummary(row), reused: false };
   }
 
   /** 卡片全部摘要（含同内容跨卡缓存行），最新在前。 */
-  async listForCard(params: { feedItemId: string; contentHash?: string }): Promise<PbFeedSummary[]> {
+  async listForCard(params: {
+    feedItemId: string;
+    contentHash?: string;
+  }): Promise<PbFeedSummary[]> {
     await this.ensureReady();
     const db = this.connection.getDatabase();
     const rows = params.contentHash
@@ -138,7 +147,9 @@ export class FeedSummaryRepo {
           )
           .all(params.feedItemId, params.contentHash) as unknown as SummaryRow[])
       : (db
-          .prepare(`SELECT * FROM pb_feed_summaries WHERE feed_item_id = ? ORDER BY created_at DESC`)
+          .prepare(
+            `SELECT * FROM pb_feed_summaries WHERE feed_item_id = ? ORDER BY created_at DESC`,
+          )
           .all(params.feedItemId) as unknown as SummaryRow[]);
     return rows.map(rowToSummary);
   }

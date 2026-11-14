@@ -47,9 +47,11 @@ async function makeHarnessWithCard() {
         session: { sessionId: `sess-${Math.random()}` },
       } as unknown as ZCodeSessionStateSnapshot;
     }),
-    sendConversationCommandV4: vi.fn().mockImplementation(async (params: { envelope: CommandEnvelope }) => {
-      return { status: "accepted", commandId: params.envelope.commandId } as CommandAck;
-    }),
+    sendConversationCommandV4: vi
+      .fn()
+      .mockImplementation(async (params: { envelope: CommandEnvelope }) => {
+        return { status: "accepted", commandId: params.envelope.commandId } as CommandAck;
+      }),
   };
   const port = createAgentRuntimePort({
     agentService,

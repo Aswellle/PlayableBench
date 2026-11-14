@@ -6,7 +6,11 @@
 import type { PbFeedSummary, PbRun, PbSummaryCitation, PbWorkflowTemplate } from "@zcode/shared";
 import type { IAgentRuntimePort } from "#src/playablebench/agentRuntimePort.js";
 import { composeResearchGoal } from "#src/playablebench/goalComposer.js";
-import type { IResearchService, ResearchRunView, ResearchStartResult } from "#src/playablebench/researchService.js";
+import type {
+  IResearchService,
+  ResearchRunView,
+  ResearchStartResult,
+} from "#src/playablebench/researchService.js";
 import { FeedItemRepo } from "#src/session/feedItemRepo.js";
 import { FeedSourceRepo } from "#src/session/feedSourceRepo.js";
 import { FeedSummaryRepo } from "#src/session/feedSummaryRepo.js";
@@ -136,7 +140,9 @@ export function createResearchService(options: ResearchServiceHostOptions): IRes
         .reverse()
         .find((event) => event.eventType === "message.final");
       if (!finalMessage?.payloadJson) {
-        throw Object.assign(new Error("运行事件流中没有可提取的最终回复"), { kind: "summary_not_available" });
+        throw Object.assign(new Error("运行事件流中没有可提取的最终回复"), {
+          kind: "summary_not_available",
+        });
       }
       let payload: { text?: string; model?: string };
       try {

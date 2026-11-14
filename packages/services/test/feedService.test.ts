@@ -29,7 +29,10 @@ const RSS_BODY = `<?xml version="1.0"?><rss version="2.0"><channel><title>测试
 </channel></rss>`;
 
 function makeHarness(
-  handler: (request: import("node:http").IncomingMessage, response: import("node:http").ServerResponse) => void,
+  handler: (
+    request: import("node:http").IncomingMessage,
+    response: import("node:http").ServerResponse,
+  ) => void,
   options?: { schedulerPollIntervalMs?: number },
 ) {
   const { createServer } = require("node:http") as typeof import("node:http");
@@ -63,11 +66,19 @@ function makeHarness(
       real.hostname = "127.0.0.1";
       real.port = String(address.port);
       const { guardedFetch } = await import("#src/playablebench/fetchGuard.js");
-      const response = await guardedFetch(real.toString(), { allowLoopback: true, maxBytes: 2 * 1024 * 1024 });
+      const response = await guardedFetch(real.toString(), {
+        allowLoopback: true,
+        maxBytes: 2 * 1024 * 1024,
+      });
       if (response.status !== 200) {
-        return { status: "failed" as const, httpStatus: response.status, errorCode: `http_${response.status}` };
+        return {
+          status: "failed" as const,
+          httpStatus: response.status,
+          errorCode: `http_${response.status}`,
+        };
       }
-      const { parseFeedDocument, FeedParseError } = await import("#src/playablebench/feedParser.js");
+      const { parseFeedDocument, FeedParseError } =
+        await import("#src/playablebench/feedParser.js");
       try {
         const parsed = parseFeedDocument(response.bodyText);
         return { status: "fetched" as const, httpStatus: 200, items: parsed.items };
@@ -179,15 +190,19 @@ describe("IFeedService 服务面", () => {
     expect(probe?.rawInput).toBe(`第一条\n${card.originalUrl}`);
     expect(probe?.sourceUrl).toBe(card.originalUrl);
 
-    await expect(service.convertCardToTask({ cardId: "missing", workspacePath: "/tmp/ws" })).rejects
-      .toMatchObject({ kind: "card_not_found" });
+    await expect(
+      service.convertCardToTask({ cardId: "missing", workspacePath: "/tmp/ws" }),
+    ).rejects.toMatchObject({ kind: "card_not_found" });
   });
 
   it("常驻调度：到期来源自动补采；stopScheduler 停止", async () => {
-    const { service, server } = makeHarness((request, response) => {
-      response.writeHead(200);
-      response.end(RSS_BODY);
-    }, { schedulerPollIntervalMs: 15 });
+    const { service, server } = makeHarness(
+      (request, response) => {
+        response.writeHead(200);
+        response.end(RSS_BODY);
+      },
+      { schedulerPollIntervalMs: 15 },
+    );
     void server;
     try {
       const source = await service.addSource({ url: "https://blog.example.com/feed.xml" });

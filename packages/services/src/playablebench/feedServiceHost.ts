@@ -2,7 +2,12 @@
 // 组装 FeedSourceRepo/FeedItemRepo/connector/调度器；来源 URL 添加时即做
 // scheme/字面量校验（SSRF 防线的前置反馈，抓取时仍逐跳校验）。
 import type { FeedItem, FeedMetricSnapshot, ZCodeTaskPriority } from "@zcode/shared";
-import type { FeedCardQueryParams, FeedCardTaskResult, FeedRefreshSummary, IFeedService } from "#src/playablebench/feedService.js";
+import type {
+  FeedCardQueryParams,
+  FeedCardTaskResult,
+  FeedRefreshSummary,
+  IFeedService,
+} from "#src/playablebench/feedService.js";
 import type { FeedConnector } from "#src/playablebench/feedConnector.js";
 import { createRssAtomConnector } from "#src/playablebench/feedConnector.js";
 import { FetchGuardError, assertFetchableUrl } from "#src/playablebench/fetchGuard.js";

@@ -14,7 +14,13 @@ import { ServiceChannels } from "@zcode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
 
 export interface FeedRefreshSummary {
-  status: "fetched" | "not_modified" | "failed" | "skipped_paused" | "skipped_in_flight" | "skipped_disabled";
+  status:
+    | "fetched"
+    | "not_modified"
+    | "failed"
+    | "skipped_paused"
+    | "skipped_in_flight"
+    | "skipped_disabled";
   newItems?: number;
   errorCode?: string;
   nextEligibleAt?: number;
@@ -59,7 +65,9 @@ export interface IFeedService {
   }): Promise<FeedCardTaskResult>;
   /** 统一卡片列表（spec 08 §4 契约字段）。 */
   listCards(params?: FeedCardQueryParams): Promise<FeedItem[]>;
-  getCardCounts(params?: { sourceId?: string }): Promise<{ unread: number; favorites: number; total: number }>;
+  getCardCounts(params?: {
+    sourceId?: string;
+  }): Promise<{ unread: number; favorites: number; total: number }>;
   setFavorite(id: string, favorite: boolean): Promise<FeedItem | null>;
   markRead(id: string, read?: boolean): Promise<FeedItem | null>;
   /** 互动指标采样（带指标名与采样时刻；spec 08 §8）。 */

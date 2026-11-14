@@ -15,10 +15,7 @@ import type {
 } from "#src/session/runStoreRows.js";
 import { RunStoreConnection } from "#src/session/runStoreConnection.js";
 
-export {
-  rowToEvent,
-  rowToRun,
-} from "#src/session/runStoreRows.js";
+export { rowToEvent, rowToRun } from "#src/session/runStoreRows.js";
 export type {
   RunEventRow,
   RunRow,
@@ -85,7 +82,9 @@ export class RunRepo {
   async getRunBySessionId(runtimeSessionId: string): Promise<PbRun | null> {
     await this.connection.ensureReady();
     const row = this.getDatabase()
-      .prepare(`SELECT * FROM pb_runs WHERE runtime_session_id = ? ORDER BY created_at DESC LIMIT 1`)
+      .prepare(
+        `SELECT * FROM pb_runs WHERE runtime_session_id = ? ORDER BY created_at DESC LIMIT 1`,
+      )
       .get(runtimeSessionId) as RunRow | undefined;
     return row ? rowToRun(row) : null;
   }
@@ -225,7 +224,9 @@ export class RunRepo {
         payloadJson: transition.payloadJson,
         schemaVersion: 1,
       };
-      const updated = db.prepare(`SELECT * FROM pb_runs WHERE id = ?`).get(runId) as unknown as RunRow;
+      const updated = db
+        .prepare(`SELECT * FROM pb_runs WHERE id = ?`)
+        .get(runId) as unknown as RunRow;
       db.exec("COMMIT");
       return { run: rowToRun(updated), disposition: "applied", event };
     } catch (error) {
@@ -260,7 +261,15 @@ export class RunRepo {
         `INSERT INTO pb_run_events
           (run_id, sequence, event_id, event_type, occurred_at, payload_json, schema_version, created_at)
          VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-      ).run(runId, sequence, event.eventId, event.eventType, now, event.payloadJson ?? null, Date.now());
+      ).run(
+        runId,
+        sequence,
+        event.eventId,
+        event.eventType,
+        now,
+        event.payloadJson ?? null,
+        Date.now(),
+      );
       const inserted = db
         .prepare(`SELECT * FROM pb_run_events WHERE run_id = ? AND event_id = ?`)
         .get(runId, event.eventId) as unknown as RunEventRow;
@@ -276,7 +285,10 @@ export class RunRepo {
     }
   }
 
-  async listRunEvents(runId: string, params?: { fromSequence?: number; limit?: number }): Promise<PbRunEvent[]> {
+  async listRunEvents(
+    runId: string,
+    params?: { fromSequence?: number; limit?: number },
+  ): Promise<PbRunEvent[]> {
     await this.connection.ensureReady();
     const limit = Math.max(1, Math.min(params?.limit ?? 200, 1000));
     const from = params?.fromSequence ?? 0;

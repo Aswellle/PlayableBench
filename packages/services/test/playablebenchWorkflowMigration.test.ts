@@ -38,7 +38,8 @@ async function importMigrations() {
 
 describe("tasks-index migration 0008 (workflow + feed summaries)", () => {
   it("0007 库升级到 0008 后既有数据保留且新表可用；账本完整", async () => {
-    const { runTasksDatabaseMigrations, areTasksDatabaseMigrationsApplied } = await importMigrations();
+    const { runTasksDatabaseMigrations, areTasksDatabaseMigrationsApplied } =
+      await importMigrations();
     const db = new DatabaseSync(makeDbPath());
     db.exec("PRAGMA journal_mode = WAL");
     try {
@@ -54,9 +55,9 @@ describe("tasks-index migration 0008 (workflow + feed summaries)", () => {
 
       runTasksDatabaseMigrations(db);
       expect(areTasksDatabaseMigrationsApplied(db)).toBe(true);
-      const kept = db
-        .prepare(`SELECT title FROM pb_notes WHERE id = 'note-keep'`)
-        .get() as { title: string };
+      const kept = db.prepare(`SELECT title FROM pb_notes WHERE id = 'note-keep'`).get() as {
+        title: string;
+      };
       expect(kept.title).toBe("升级前笔记");
       // 两张新表可写可查。
       db.prepare(
@@ -64,7 +65,9 @@ describe("tasks-index migration 0008 (workflow + feed summaries)", () => {
          VALUES ('research_article', 'v1', '研究一篇文章', 1)`,
       ).run();
       const template = db
-        .prepare(`SELECT name FROM pb_workflow_templates WHERE id='research_article' AND version='v1'`)
+        .prepare(
+          `SELECT name FROM pb_workflow_templates WHERE id='research_article' AND version='v1'`,
+        )
         .get() as { name: string };
       expect(template.name).toBe("研究一篇文章");
     } finally {
@@ -83,7 +86,9 @@ describe("tasks-index migration 0008 (workflow + feed summaries)", () => {
       );
       insert.run("t", "v1", "one", 1);
       insert.run("t", "v2", "two", 2);
-      expect(db.prepare(`SELECT count(*) AS n FROM pb_workflow_templates`).get()).toMatchObject({ n: 2 });
+      expect(db.prepare(`SELECT count(*) AS n FROM pb_workflow_templates`).get()).toMatchObject({
+        n: 2,
+      });
       expect(() => insert.run("t", "v1", "dup", 3)).toThrow();
     } finally {
       db.close();
@@ -103,9 +108,13 @@ describe("tasks-index migration 0008 (workflow + feed summaries)", () => {
       );
       insert.run("s1", "item-1", "h1", "https://example.com/a", "标题", "m", "", "摘要", 1);
       // 同卡同模型重复 → 拒绝。
-      expect(() => insert.run("s2", "item-1", "h1", "https://example.com/a", "标题", "m", "", "重复", 2)).toThrow();
+      expect(() =>
+        insert.run("s2", "item-1", "h1", "https://example.com/a", "标题", "m", "", "重复", 2),
+      ).toThrow();
       // 同内容跨卡（镜像）→ 唯一键拒绝（缓存命中场景，由 repo 层先查后写）。
-      expect(() => insert.run("s3", "item-2", "h1", "https://example.com/b", "标题", "m", "", "镜像", 3)).toThrow();
+      expect(() =>
+        insert.run("s3", "item-2", "h1", "https://example.com/b", "标题", "m", "", "镜像", 3),
+      ).toThrow();
       // 不同模型 → 允许并存。
       insert.run("s4", "item-1", "h1", "https://example.com/a", "标题", "m2", "", "另一模型", 4);
       // 无 content_hash（镜像前未见规范化正文）的条目不做内容级缓存去重：

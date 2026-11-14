@@ -25,7 +25,9 @@ export function RadarView(props: { workspacePath: string }) {
   const benchService = services.playableBenchService;
   const [sources, setSources] = useState<FeedSource[] | null>(null);
   const [cards, setCards] = useState<FeedItem[] | null>(null);
-  const [counts, setCounts] = useState<{ unread: number; favorites: number; total: number } | null>(null);
+  const [counts, setCounts] = useState<{ unread: number; favorites: number; total: number } | null>(
+    null,
+  );
   const [projects, setProjects] = useState<Project[]>([]);
   const [filter, setFilter] = useState<CardFilter>("all");
   const [draftUrl, setDraftUrl] = useState("");
@@ -204,9 +206,14 @@ export function RadarView(props: { workspacePath: string }) {
           workspacePath: props.workspacePath,
         });
         setResearchStatusByCard((prev) => ({ ...prev, [item.id]: result.run.status }));
-        return intl.formatMessage({
-          id: result.reused ? "playablebench.radar.researchReused" : "playablebench.radar.researchStarted",
-        }, { status: result.run.status });
+        return intl.formatMessage(
+          {
+            id: result.reused
+              ? "playablebench.radar.researchReused"
+              : "playablebench.radar.researchStarted",
+          },
+          { status: result.run.status },
+        );
       });
     },
     [intl, props.workspacePath, researchService, runCardAction],
@@ -258,7 +265,10 @@ export function RadarView(props: { workspacePath: string }) {
         className="rounded-xl border border-border bg-surface p-4"
         data-testid="playablebench-radar-add-source"
       >
-        <label className="mb-2 block text-ui-base/relaxed font-medium text-foreground" htmlFor="playablebench-radar-url">
+        <label
+          className="mb-2 block text-ui-base/relaxed font-medium text-foreground"
+          htmlFor="playablebench-radar-url"
+        >
           {intl.formatMessage({ id: "playablebench.radar.addSourceLabel" })}
         </label>
         <div className="flex gap-2">
@@ -300,7 +310,10 @@ export function RadarView(props: { workspacePath: string }) {
         </div>
       ) : null}
 
-      <section aria-label={intl.formatMessage({ id: "playablebench.radar.sources" })} className="flex flex-col gap-2">
+      <section
+        aria-label={intl.formatMessage({ id: "playablebench.radar.sources" })}
+        className="flex flex-col gap-2"
+      >
         <h2 className="text-ui-base/relaxed font-medium text-foreground">
           {intl.formatMessage({ id: "playablebench.radar.sources" })}
         </h2>
@@ -316,7 +329,9 @@ export function RadarView(props: { workspacePath: string }) {
                 className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
               >
                 <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-ui-base/relaxed text-foreground">{source.name}</span>
+                  <span className="truncate text-ui-base/relaxed text-foreground">
+                    {source.name}
+                  </span>
                   <span className="truncate text-ui-base/relaxed text-foreground-subtle">
                     {source.paused
                       ? intl.formatMessage({ id: "playablebench.radar.sourcePaused" })
@@ -342,7 +357,9 @@ export function RadarView(props: { workspacePath: string }) {
                     onClick={() => void handleRefreshSource(source.id)}
                     disabled={refreshingId === source.id}
                   >
-                    <RefreshCw className={refreshingId === source.id ? "size-3.5 animate-spin" : "size-3.5"} />
+                    <RefreshCw
+                      className={refreshingId === source.id ? "size-3.5 animate-spin" : "size-3.5"}
+                    />
                     {intl.formatMessage({ id: "playablebench.radar.refresh" })}
                   </Button>
                   <Button
@@ -356,7 +373,11 @@ export function RadarView(props: { workspacePath: string }) {
                     }
                     onClick={() => void handleTogglePause(source)}
                   >
-                    {source.paused ? <PlayCircle className="size-3.5" /> : <PauseCircle className="size-3.5" />}
+                    {source.paused ? (
+                      <PlayCircle className="size-3.5" />
+                    ) : (
+                      <PauseCircle className="size-3.5" />
+                    )}
                   </Button>
                   <Button
                     type="button"
@@ -374,7 +395,10 @@ export function RadarView(props: { workspacePath: string }) {
         )}
       </section>
 
-      <section aria-label={intl.formatMessage({ id: "playablebench.radar.cards" })} className="flex flex-col gap-3">
+      <section
+        aria-label={intl.formatMessage({ id: "playablebench.radar.cards" })}
+        className="flex flex-col gap-3"
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-ui-base/relaxed font-medium text-foreground">
             {intl.formatMessage({ id: "playablebench.radar.cards" })}
@@ -386,7 +410,10 @@ export function RadarView(props: { workspacePath: string }) {
           </h2>
           <div className="flex gap-1.5">
             {filterButton("all", intl.formatMessage({ id: "playablebench.radar.filterAll" }))}
-            {filterButton("favorites", intl.formatMessage({ id: "playablebench.radar.filterFavorites" }))}
+            {filterButton(
+              "favorites",
+              intl.formatMessage({ id: "playablebench.radar.filterFavorites" }),
+            )}
             {filterButton("unread", intl.formatMessage({ id: "playablebench.radar.filterUnread" }))}
           </div>
         </div>

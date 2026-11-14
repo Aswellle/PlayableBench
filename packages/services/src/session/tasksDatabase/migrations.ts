@@ -13,12 +13,18 @@ import {
   PLAYABLEBENCH_DOMAIN_V4_SQL,
   TASK_FIELDS_V4,
 } from "#src/session/tasksDatabase/playablebench-domain-v4.js";
-import { applyPlayableBenchRunsV5, PLAYABLEBENCH_RUNS_V5_SQL } from "#src/session/tasksDatabase/playablebench-runs-v5.js";
+import {
+  applyPlayableBenchRunsV5,
+  PLAYABLEBENCH_RUNS_V5_SQL,
+} from "#src/session/tasksDatabase/playablebench-runs-v5.js";
 import {
   applyPlayableBenchFtsNotesFixV6,
   PB_NOTES_FTS_FIX_SQL,
 } from "#src/session/tasksDatabase/playablebench-fts-notes-fix-v6.js";
-import { applyPlayableBenchFeedV7, PLAYABLEBENCH_FEED_V7_SQL } from "#src/session/tasksDatabase/playablebench-feed-v7.js";
+import {
+  applyPlayableBenchFeedV7,
+  PLAYABLEBENCH_FEED_V7_SQL,
+} from "#src/session/tasksDatabase/playablebench-feed-v7.js";
 import {
   applyPlayableBenchWorkflowV8,
   PLAYABLEBENCH_WORKFLOW_V8_SQL,

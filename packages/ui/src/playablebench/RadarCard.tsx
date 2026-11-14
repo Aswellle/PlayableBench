@@ -61,7 +61,10 @@ export const RadarCard = memo(function RadarCard({
   const latest = summaries?.[0];
 
   return (
-    <li className="rounded-xl border border-border bg-surface p-4" data-testid="playablebench-radar-card">
+    <li
+      className="rounded-xl border border-border bg-surface p-4"
+      data-testid="playablebench-radar-card"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <span className="text-ui-base/relaxed font-medium text-foreground">{item.title}</span>
@@ -79,7 +82,9 @@ export const RadarCard = memo(function RadarCard({
             aria-label={intl.formatMessage({ id: "playablebench.radar.favorite" })}
             onClick={() => onToggleFavorite(item)}
           >
-            <Heart className={item.favoriteAt !== undefined ? "size-3.5 fill-current" : "size-3.5"} />
+            <Heart
+              className={item.favoriteAt !== undefined ? "size-3.5 fill-current" : "size-3.5"}
+            />
           </Button>
           <Button
             type="button"
@@ -88,7 +93,12 @@ export const RadarCard = memo(function RadarCard({
             aria-pressed={item.readAt !== undefined}
             onClick={() => onToggleRead(item)}
           >
-            {intl.formatMessage({ id: item.readAt !== undefined ? "playablebench.radar.read" : "playablebench.radar.unread" })}
+            {intl.formatMessage({
+              id:
+                item.readAt !== undefined
+                  ? "playablebench.radar.read"
+                  : "playablebench.radar.unread",
+            })}
           </Button>
           <a
             href={item.originalUrl}
@@ -101,14 +111,22 @@ export const RadarCard = memo(function RadarCard({
         </div>
       </div>
       {item.summary ? (
-        <p className="mt-2 line-clamp-3 text-ui-base/relaxed text-foreground-subtle">{item.summary}</p>
+        <p className="mt-2 line-clamp-3 text-ui-base/relaxed text-foreground-subtle">
+          {item.summary}
+        </p>
       ) : null}
       <p className="mt-2 text-ui-base/relaxed text-foreground-subtle">
         {item.publishedAt
-          ? intl.formatMessage({ id: "playablebench.radar.publishedAt" }, { time: formatCardTime(item.publishedAt) })
+          ? intl.formatMessage(
+              { id: "playablebench.radar.publishedAt" },
+              { time: formatCardTime(item.publishedAt) },
+            )
           : ""}
         {` · `}
-        {intl.formatMessage({ id: "playablebench.radar.firstSeenAt" }, { time: formatCardTime(item.firstSeenAt) })}
+        {intl.formatMessage(
+          { id: "playablebench.radar.firstSeenAt" },
+          { time: formatCardTime(item.firstSeenAt) },
+        )}
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -137,7 +155,9 @@ export const RadarCard = memo(function RadarCard({
         {hasProjects ? (
           <label className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 text-ui-base/relaxed text-foreground-subtle">
             <FolderPlus className="size-3.5" />
-            <span className="sr-only">{intl.formatMessage({ id: "playablebench.radar.addToProject" })}</span>
+            <span className="sr-only">
+              {intl.formatMessage({ id: "playablebench.radar.addToProject" })}
+            </span>
             <select
               className="bg-transparent py-1.5 text-ui-base/relaxed text-foreground outline-none"
               value=""
@@ -146,7 +166,9 @@ export const RadarCard = memo(function RadarCard({
                 if (event.target.value) onLinkProject(item, event.target.value);
               }}
             >
-              <option value="">{intl.formatMessage({ id: "playablebench.radar.addToProjectPlaceholder" })}</option>
+              <option value="">
+                {intl.formatMessage({ id: "playablebench.radar.addToProjectPlaceholder" })}
+              </option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -164,7 +186,9 @@ export const RadarCard = memo(function RadarCard({
           onClick={handleLoadSummaries}
         >
           <ScrollText className="size-3.5" />
-          {intl.formatMessage({ id: summaries ? "playablebench.radar.summary" : "playablebench.radar.summaryLoad" })}
+          {intl.formatMessage({
+            id: summaries ? "playablebench.radar.summary" : "playablebench.radar.summaryLoad",
+          })}
         </Button>
       </div>
 
@@ -176,12 +200,18 @@ export const RadarCard = memo(function RadarCard({
       ) : null}
 
       {latest ? (
-        <div className="mt-3 rounded-lg border border-border/60 bg-background/50 p-3" data-testid="playablebench-radar-summary">
+        <div
+          className="mt-3 rounded-lg border border-border/60 bg-background/50 p-3"
+          data-testid="playablebench-radar-summary"
+        >
           <p className="text-ui-base/relaxed text-foreground">{latest.summaryText}</p>
           <p className="mt-2 text-ui-base/relaxed text-foreground-subtle">
             {intl.formatMessage(
               { id: "playablebench.radar.summaryTrace" },
-              { model: `${latest.model}${latest.modelVersion ? `/${latest.modelVersion}` : ""}`, time: formatCardTime(latest.createdAt) },
+              {
+                model: `${latest.model}${latest.modelVersion ? `/${latest.modelVersion}` : ""}`,
+                time: formatCardTime(latest.createdAt),
+              },
             )}
             {` · ${latest.runId ? `run:${latest.runId.slice(0, 8)} · ` : ""}`}
             {intl.formatMessage(

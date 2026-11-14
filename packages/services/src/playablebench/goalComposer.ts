@@ -31,7 +31,9 @@ export function composeResearchGoal(input: ResearchGoalInput): string {
     `original_url: ${escapeUntrustedField(input.originalUrl)}`,
     ...(input.canonicalUrl ? [`canonical_url: ${escapeUntrustedField(input.canonicalUrl)}`] : []),
     ...(input.author ? [`author: ${escapeUntrustedField(input.author)}`] : []),
-    ...(input.publishedAt !== undefined ? [`published_at: ${new Date(input.publishedAt).toISOString()}`] : []),
+    ...(input.publishedAt !== undefined
+      ? [`published_at: ${new Date(input.publishedAt).toISOString()}`]
+      : []),
     ...(input.sourceName ? [`source: ${escapeUntrustedField(input.sourceName)}`] : []),
     ...(input.summary ? [`excerpt: ${escapeUntrustedField(input.summary)}`] : []),
   ].join("\n");

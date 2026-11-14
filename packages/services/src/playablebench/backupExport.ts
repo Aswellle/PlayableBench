@@ -65,9 +65,7 @@ type DatabaseRow = Record<string, unknown>;
 
 function hashRows(rows: Array<DatabaseRow>): string {
   // 行内容规范化哈希：键排序剔除 undefined，导出方与校验方共用同一函数。
-  const canonical = JSON.stringify(rows, (_key, value) =>
-    value === undefined ? null : value,
-  );
+  const canonical = JSON.stringify(rows, (_key, value) => (value === undefined ? null : value));
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -196,7 +194,9 @@ export async function restoreBackup(
         for (const row of content.rows as DatabaseRow[]) {
           insert.run(
             ...columns.map((column) =>
-              row[column] === undefined ? null : (row[column] as string | number | bigint | Buffer | null),
+              row[column] === undefined
+                ? null
+                : (row[column] as string | number | bigint | Buffer | null),
             ),
           );
         }

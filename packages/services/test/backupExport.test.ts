@@ -62,19 +62,25 @@ describe("备份导出与恢复", () => {
     const source = makeConnection();
     await source.ensureReady();
     const sourceDb = source.getDatabase();
-    sourceDb.prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
-      VALUES ('note-1', '恢复验证', 'restore probe 恢复探针', 1, 1)`).run();
-    sourceDb.prepare(`INSERT INTO tasks (
+    sourceDb
+      .prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
+      VALUES ('note-1', '恢复验证', 'restore probe 恢复探针', 1, 1)`)
+      .run();
+    sourceDb
+      .prepare(`INSERT INTO tasks (
         workspace_key, workspace_path, task_id, title, mode, created_at, updated_at, searchable_text
-      ) VALUES ('ws', '/tmp/ws', 'task-keep', '保留任务', 'default', 1, 1, '正文')`).run();
+      ) VALUES ('ws', '/tmp/ws', 'task-keep', '保留任务', 'default', 1, 1, '正文')`)
+      .run();
     const file = await createBackupExport(source);
 
     // 目标库为全新空库（已迁移）：先写一条会被恢复覆盖清理的行。
     const target = makeConnection();
     await target.ensureReady();
     const targetDb = target.getDatabase();
-    targetDb.prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
-      VALUES ('note-stale', '将被清除', 'stale', 1, 1)`).run();
+    targetDb
+      .prepare(`INSERT INTO pb_notes (id, title, body, created_at, updated_at)
+      VALUES ('note-stale', '将被清除', 'stale', 1, 1)`)
+      .run();
 
     const preview = await previewBackupImport(file, target);
     expect(preview.valid).toBe(true);
@@ -110,20 +116,26 @@ describe("备份导出与恢复", () => {
     const source = makeConnection();
     await source.ensureReady();
     const sourceDb = source.getDatabase();
-    sourceDb.prepare(
-      `INSERT INTO pb_feed_sources (id, connector_type, name, url, created_at, updated_at)
+    sourceDb
+      .prepare(
+        `INSERT INTO pb_feed_sources (id, connector_type, name, url, created_at, updated_at)
        VALUES ('src-1', 'rss_atom', '源一', 'https://example.com/feed.xml', 1, 1)`,
-    ).run();
-    sourceDb.prepare(
-      `INSERT INTO pb_feed_items (id, source_id, canonical_url, original_url, title,
+      )
+      .run();
+    sourceDb
+      .prepare(
+        `INSERT INTO pb_feed_items (id, source_id, canonical_url, original_url, title,
          first_seen_at, last_seen_at, content_hash, created_at, updated_at)
        VALUES ('item-1', 'src-1', 'https://example.com/a', 'https://example.com/a?utm=1',
          '恢复探针文章', 1, 1, 'hash-1', 1, 1)`,
-    ).run();
-    sourceDb.prepare(
-      `INSERT INTO pb_workflow_templates (id, version, name, created_at)
+      )
+      .run();
+    sourceDb
+      .prepare(
+        `INSERT INTO pb_workflow_templates (id, version, name, created_at)
        VALUES ('research_article', 'v1', '研究一篇文章', 1)`,
-    ).run();
+      )
+      .run();
     const file = await createBackupExport(source);
     expect(file.contents.find((c) => c.table === "pb_feed_items")?.rowCount).toBe(1);
 
@@ -134,7 +146,9 @@ describe("备份导出与恢复", () => {
     expect(result.restoredTables).toContain("pb_feed_sources");
     expect(result.restoredTables).toContain("pb_feed_items");
     expect(result.restoredTables).toContain("pb_workflow_templates");
-    const items = targetDb.prepare(`SELECT title FROM pb_feed_items`).all() as Array<{ title: string }>;
+    const items = targetDb.prepare(`SELECT title FROM pb_feed_items`).all() as Array<{
+      title: string;
+    }>;
     expect(items.map((r) => r.title)).toEqual(["恢复探针文章"]);
     // 恢复内置 feed FTS 重建：restore 后无需手动 rebuild 即可检索。
     const hit = targetDb
