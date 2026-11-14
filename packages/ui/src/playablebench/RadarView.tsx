@@ -3,13 +3,14 @@
 // 闭环动作（spec 16 门禁）：转任务/交给 Agent 研究走服务幂等语义，反馈就地透出；
 // 加入项目复用 linkProjectItem（feed_item 关联）。HTML 不渲染，仅纯文本。
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, PauseCircle, PlayCircle, RefreshCw, Rss, Trash2 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { FeedItem, FeedSource, PbFeedSummary, Project } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { RadarCard } from "@/playablebench/RadarCard.js";
+import { RadarSourcesPanel } from "@/playablebench/RadarSourcesPanel.js";
 
 type CardFilter = "all" | "favorites" | "unread";
 
@@ -261,139 +262,17 @@ export function RadarView(props: { workspacePath: string }) {
 
   return (
     <div className="flex flex-col gap-4" data-testid="playablebench-radar-view">
-      <div
-        className="rounded-xl border border-border bg-surface p-4"
-        data-testid="playablebench-radar-add-source"
-      >
-        <label
-          className="mb-2 block text-ui-base/relaxed font-medium text-foreground"
-          htmlFor="playablebench-radar-url"
-        >
-          {intl.formatMessage({ id: "playablebench.radar.addSourceLabel" })}
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="playablebench-radar-url"
-            type="url"
-            className="min-w-0 flex-1 rounded-lg border border-border bg-background p-2.5 text-ui-base/relaxed text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
-            placeholder={intl.formatMessage({ id: "playablebench.radar.addSourcePlaceholder" })}
-            value={draftUrl}
-            onChange={(event) => setDraftUrl(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void handleAddSource();
-              }
-            }}
-          />
-          <Button
-            type="button"
-            variant="default"
-            size="default"
-            className="gap-2"
-            onClick={() => void handleAddSource()}
-            disabled={adding || !draftUrl.trim()}
-          >
-            <Rss className="size-3.5" />
-            {intl.formatMessage({ id: "playablebench.radar.addSource" })}
-          </Button>
-        </div>
-      </div>
-
-      {loadError !== null ? (
-        <div
-          role="alert"
-          className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-destructive"
-        >
-          <AlertTriangle className="size-4 shrink-0" />
-          <span className="text-ui-base/relaxed">{loadError}</span>
-        </div>
-      ) : null}
-
-      <section
-        aria-label={intl.formatMessage({ id: "playablebench.radar.sources" })}
-        className="flex flex-col gap-2"
-      >
-        <h2 className="text-ui-base/relaxed font-medium text-foreground">
-          {intl.formatMessage({ id: "playablebench.radar.sources" })}
-        </h2>
-        {sources === null ? null : sources.length === 0 ? (
-          <p className="text-ui-base/relaxed text-foreground-subtle">
-            {intl.formatMessage({ id: "playablebench.radar.sourcesEmpty" })}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {sources.map((source) => (
-              <li
-                key={source.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-              >
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-ui-base/relaxed text-foreground">
-                    {source.name}
-                  </span>
-                  <span className="truncate text-ui-base/relaxed text-foreground-subtle">
-                    {source.paused
-                      ? intl.formatMessage({ id: "playablebench.radar.sourcePaused" })
-                      : source.lastErrorCode
-                        ? intl.formatMessage(
-                            { id: "playablebench.radar.sourceError" },
-                            { code: source.lastErrorCode },
-                          )
-                        : source.lastSuccessAt
-                          ? intl.formatMessage(
-                              { id: "playablebench.radar.sourceLastSuccess" },
-                              { time: formatTime(source.lastSuccessAt) },
-                            )
-                          : ""}
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="default"
-                    className="gap-1.5"
-                    onClick={() => void handleRefreshSource(source.id)}
-                    disabled={refreshingId === source.id}
-                  >
-                    <RefreshCw
-                      className={refreshingId === source.id ? "size-3.5 animate-spin" : "size-3.5"}
-                    />
-                    {intl.formatMessage({ id: "playablebench.radar.refresh" })}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="default"
-                    aria-label={
-                      source.paused
-                        ? intl.formatMessage({ id: "playablebench.radar.resumeSource" })
-                        : intl.formatMessage({ id: "playablebench.radar.pauseSource" })
-                    }
-                    onClick={() => void handleTogglePause(source)}
-                  >
-                    {source.paused ? (
-                      <PlayCircle className="size-3.5" />
-                    ) : (
-                      <PauseCircle className="size-3.5" />
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="default"
-                    aria-label={intl.formatMessage({ id: "playablebench.radar.removeSource" })}
-                    onClick={() => void handleRemoveSource(source)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <RadarSourcesPanel
+        sources={sources}
+        draftUrl={draftUrl}
+        adding={adding}
+        refreshingId={refreshingId}
+        onDraftUrlChange={setDraftUrl}
+        onAddSource={() => void handleAddSource()}
+        onRefreshSource={(id) => void handleRefreshSource(id)}
+        onTogglePause={(source) => void handleTogglePause(source)}
+        onRemoveSource={(source) => void handleRemoveSource(source)}
+      />
 
       <section
         aria-label={intl.formatMessage({ id: "playablebench.radar.cards" })}
