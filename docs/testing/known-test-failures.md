@@ -21,38 +21,39 @@
 
 ## CI 豁免清单（`test:unit:ci`，共 10 文件）
 
-| # | 测试文件 | 失败表现 | 分类 | 归因 | 处置 |
-|---|---|---|---|---|---|
-| 1 | `packages/desktop/test/desktopMainIpcRemoteTelemetry.test.ts` | 断言 openExternal 以 POSIX 路径 `'/tmp/secret'` 调用，0 次（本机与 CI 均失败） | 已知兼容问题 | POSIX 路径语义 | Phase 2 改为平台无关路径断言后恢复 |
-| 2 | `packages/desktop/test/desktopMainIpcRemoteOpenExternalFile.test.ts` | `file:///tmp/...`、`file://server/share` 分流断言失败（本机与 CI 均失败，2 用例） | 已知兼容问题 | POSIX/UNC 路径语义 | 同上 |
-| 3 | `packages/desktop/test/subagentConfigProxy.test.ts` | `ERR_UNSUPPORTED_ESM_URL_SCHEME: protocol 'd:'`（本机与 CI 均失败，2 用例） | 已知兼容问题 | Windows 盘符路径未转 file:// URL | 登记豁免；修复点在测试的模块加载方式 |
-| 4 | `packages/desktop/test/windowsInstallerNshSmoke.test.ts` | 本机：makensis 编码错误；CI（run 38164826815）：`installer could not read shortcut target`（安装后读快捷方式失败） | 环境失败 | 两环境失败模式不同——NSIS 冒烟对编码与交互会话敏感 | 登记豁免；该测试验证安装器快捷方式语义，Phase 2 评估改造为独立 job |
-| 5 | `packages/desktop/test/desktopAgentBytecode.test.ts` | 期望 `C:\Users\runneradmin\...` 实得 `C:\Users\RUNNER~1\...`（仅 CI 失败，本机通过） | 已知兼容问题 | GH runner 的 TEMP 含 8.3 短路径名，断言未做路径规范化 | 登记豁免；修复方向为断言前 `realpath` 归一化 |
-| 6 | `packages/provider-node/test/bundled-config-replacement.test.ts` | `EPERM: rename` 并发原子写竞态（仅 CI） | 环境失败 | Windows FS rename 与并发锁竞态，CI runner 上更易触发 | 登记豁免；观察是否稳定复现 |
-| 7 | `packages/services/test/skillsService.test.ts` | 期望含 `RUNNER~1` 短路径、实得 `runneradmin` 长路径（仅 CI） | 已知兼容问题 | 同 #5，8.3 短名 vs 长名 | 同 #5 |
-| 8 | `packages/zcode-server-cli/test/cli.test.ts` | `connect ENOENT \\.\pipe\zcode-server-*`（6 用例，仅 CI；本机通过） | 环境失败 | 命名管道服务端未就绪/连接时序在 CI 上失败 | 登记豁免；修复方向为管道就绪等待 |
-| 9 | `packages/zcode-server-cli/test/daemonRegistration.test.ts` | 服务管理器不可用时命令序列为空（仅 CI） | 环境失败 | GH runner 无预期服务管理器行为 | 登记豁免 |
-| 10 | `packages/zcode-server-cli/test/releaseDownload.test.ts` | 流 idle timeout AbortError（本机与 CI 均失败） | 环境失败 | idle 超时时序敏感 | 登记豁免；复跑确认稳定性 |
-| 11 | `packages/services/test/subagentRuntimeConfigWatcher.test.ts` | 大小写改名后旧缓存清理断言失败（threads 池 5/5 通过；forks 池 6/7 失败后一次重跑通过） | 环境失败 | FS watch 事件在 forks 子进程 + CI IO 时序下投递不稳定 | CI 豁免（forks 池）；本地 threads 全量仍覆盖；两全解法（watch 轮询化）留 Phase 2 |
-| 12 | `packages/web/test/externalRelayFrameGapRecovery.test.ts` | relay 帧间隙恢复 11 用例整批失败（threads 池 CI 5/5 通过；forks 池与本机 forks 验证均失败） | 环境失败 | 异步帧时序在 forks 子进程调度下漂移 | CI 豁免（forks 池）；本地 threads 全量仍覆盖；根因解法留 Phase 2 |
+| #   | 测试文件                                                             | 失败表现                                                                                                           | 分类         | 归因                                                  | 处置                                                                             |
+| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 1   | `packages/desktop/test/desktopMainIpcRemoteTelemetry.test.ts`        | 断言 openExternal 以 POSIX 路径 `'/tmp/secret'` 调用，0 次（本机与 CI 均失败）                                     | 已知兼容问题 | POSIX 路径语义                                        | Phase 2 改为平台无关路径断言后恢复                                               |
+| 2   | `packages/desktop/test/desktopMainIpcRemoteOpenExternalFile.test.ts` | `file:///tmp/...`、`file://server/share` 分流断言失败（本机与 CI 均失败，2 用例）                                  | 已知兼容问题 | POSIX/UNC 路径语义                                    | 同上                                                                             |
+| 3   | `packages/desktop/test/subagentConfigProxy.test.ts`                  | `ERR_UNSUPPORTED_ESM_URL_SCHEME: protocol 'd:'`（本机与 CI 均失败，2 用例）                                        | 已知兼容问题 | Windows 盘符路径未转 file:// URL                      | 登记豁免；修复点在测试的模块加载方式                                             |
+| 4   | `packages/desktop/test/windowsInstallerNshSmoke.test.ts`             | 本机：makensis 编码错误；CI（run 38164826815）：`installer could not read shortcut target`（安装后读快捷方式失败） | 环境失败     | 两环境失败模式不同——NSIS 冒烟对编码与交互会话敏感     | 登记豁免；该测试验证安装器快捷方式语义，Phase 2 评估改造为独立 job               |
+| 5   | `packages/desktop/test/desktopAgentBytecode.test.ts`                 | 期望 `C:\Users\runneradmin\...` 实得 `C:\Users\RUNNER~1\...`（仅 CI 失败，本机通过）                               | 已知兼容问题 | GH runner 的 TEMP 含 8.3 短路径名，断言未做路径规范化 | 登记豁免；修复方向为断言前 `realpath` 归一化                                     |
+| 6   | `packages/provider-node/test/bundled-config-replacement.test.ts`     | `EPERM: rename` 并发原子写竞态（仅 CI）                                                                            | 环境失败     | Windows FS rename 与并发锁竞态，CI runner 上更易触发  | 登记豁免；观察是否稳定复现                                                       |
+| 7   | `packages/services/test/skillsService.test.ts`                       | 期望含 `RUNNER~1` 短路径、实得 `runneradmin` 长路径（仅 CI）                                                       | 已知兼容问题 | 同 #5，8.3 短名 vs 长名                               | 同 #5                                                                            |
+| 8   | `packages/zcode-server-cli/test/cli.test.ts`                         | `connect ENOENT \\.\pipe\zcode-server-*`（6 用例，仅 CI；本机通过）                                                | 环境失败     | 命名管道服务端未就绪/连接时序在 CI 上失败             | 登记豁免；修复方向为管道就绪等待                                                 |
+| 9   | `packages/zcode-server-cli/test/daemonRegistration.test.ts`          | 服务管理器不可用时命令序列为空（仅 CI）                                                                            | 环境失败     | GH runner 无预期服务管理器行为                        | 登记豁免                                                                         |
+| 10  | `packages/zcode-server-cli/test/releaseDownload.test.ts`             | 流 idle timeout AbortError（本机与 CI 均失败）                                                                     | 环境失败     | idle 超时时序敏感                                     | 登记豁免；复跑确认稳定性                                                         |
+| 11  | `packages/services/test/subagentRuntimeConfigWatcher.test.ts`        | 大小写改名后旧缓存清理断言失败（threads 池 5/5 通过；forks 池 6/7 失败后一次重跑通过）                             | 环境失败     | FS watch 事件在 forks 子进程 + CI IO 时序下投递不稳定 | CI 豁免（forks 池）；本地 threads 全量仍覆盖；两全解法（watch 轮询化）留 Phase 2 |
+| 12  | `packages/web/test/externalRelayFrameGapRecovery.test.ts`            | relay 帧间隙恢复 11 用例整批失败（threads 池 CI 5/5 通过；forks 池与本机 forks 验证均失败）                        | 环境失败     | 异步帧时序在 forks 子进程调度下漂移                   | CI 豁免（forks 池）；本地 threads 全量仍覆盖；根因解法留 Phase 2                 |
 
 **真实失败：0 项**——本机基线与 CI 首跑均未发现平台无关的业务逻辑断言失败；typecheck（13 项目）与 lint（0 错误）全绿。
 
 ## 本机失败但 CI 通过（不在 CI 豁免清单，CI 照常执行）
 
-| 测试文件 | 本机表现 | CI 表现 | 说明 |
-|---|---|---|---|
+| 测试文件                                                | 本机表现                                   | CI 表现                   | 说明                                                |
+| ------------------------------------------------------- | ------------------------------------------ | ------------------------- | --------------------------------------------------- |
 | `packages/desktop/test/windowsInstallerCompile.test.ts` | makensis `Bad text encoding`（中文代码页） | 通过（CI 首跑无失败记录） | CI 为英文区域 runner；本机问题待上游修 fixture 编码 |
-| `packages/desktop/test/powershell-command.test.ts` | deep-equal 不匹配（代码页） | 通过 | 同上 |
-| `packages/provider/test/m2-completion-boundary.test.ts` | 30s 超时（本机实跑 114.7s） | 通过（CI runner 更快） | 慢机超时，保留观察 |
+| `packages/desktop/test/powershell-command.test.ts`      | deep-equal 不匹配（代码页）                | 通过                      | 同上                                                |
+| `packages/provider/test/m2-completion-boundary.test.ts` | 30s 超时（本机实跑 114.7s）                | 通过（CI runner 更快）    | 慢机超时，保留观察                                  |
 
 ## 观察项（CI 偶发，未豁免）
 
-| 测试文件 | 表现 | 归因 | 处置规则 |
-|---|---|---|---|
-| `packages/services/test/subagentRuntimeConfigWatcher.test.ts` | CI run 43073576994 首次执行失败（大小写改名后旧缓存条目清理断言），`gh run rerun --failed` 重跑通过；本地连跑 3/3 通过 | 文件监听（case-only rename）对 CI IO 时序敏感，六轮全量运行中首次出现 | 暂不豁免（保持覆盖）；再次复现即移入 CI 豁免清单并归因 |
-| （非测试文件）forks 池 worker 收尾崩溃 | CI run 43462093537：17902 用例全绿、0 测试失败，但 vitest 汇总 `Errors 1 error`——"Worker forks emitted error / Worker exited unexpectedly"，job 以 exit 1 失败；同 commit 孪生 run 43462103498 全绿 | forks 池 worker 在汇总后收尾阶段异常退出（Windows runner 环境级），非任何用例断言失败；与已修复的 EPERM rename 偶发（run 43295320919）是两类问题 | 属基础设施偶发，不豁免任何用例；判定以同 commit 的权威 run 为准。再次复现且无绿色孪生 run 时按 flake 处理并升级归因 |
-| `packages/services/test/settingService.test.ts` + `packages/services/test/subagentsService.test.ts`（3-5 用例） | 本机全量并发回归（2026-11-14，工作流闭环分支）两文件共 5 用例失败（rename 收口等待、subagent 模型覆盖持久化/禁用态保留）；两文件单独跑全部全绿，改动未触及对应域 | 全量并发下 FS/时序竞争（与已登记的 rename timing、subagentsSection 断言 flake 同模式）；非业务逻辑缺陷 | 暂不豁免（单独运行通过保持覆盖）；再次复现且单文件仍绿时按并发 flake 处理 |
+| 测试文件                                                                                                        | 表现                                                                                                                                                                                                                                                                                | 归因                                                                                                                                             | 处置规则                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `packages/ui/test/sessionPluginReferenceIconProvider.test.tsx` 等 4 个 .tsx 测试                                | 2026-11-14 收集面扩展（根 vitest include 增补 .tsx）后首次被收集即失败：executeToolCallBlock/previewPaneMediaContent 断言与组件实现早已脱节（旧文案/大小写属性）、sessionPluginReferenceIconProvider 的 vi.mock 工厂 hoisting 引用顶层变量、automationDesignPrimitives 同类历史漂移 | 这些文件长期未被 include 收集（旧 glob 只匹配 .test.ts），是"死测试"——从未进过任何门禁；非新回归                                                 | CI 豁免（vitest.config unit exclude，与豁免清单同步）；恢复覆盖需单独修复过时断言/hoisting，随 UI 测试批            |
+| `packages/services/test/subagentRuntimeConfigWatcher.test.ts`                                                   | CI run 43073576994 首次执行失败（大小写改名后旧缓存条目清理断言），`gh run rerun --failed` 重跑通过；本地连跑 3/3 通过                                                                                                                                                              | 文件监听（case-only rename）对 CI IO 时序敏感，六轮全量运行中首次出现                                                                            | 暂不豁免（保持覆盖）；再次复现即移入 CI 豁免清单并归因                                                              |
+| （非测试文件）forks 池 worker 收尾崩溃                                                                          | CI run 43462093537：17902 用例全绿、0 测试失败，但 vitest 汇总 `Errors 1 error`——"Worker forks emitted error / Worker exited unexpectedly"，job 以 exit 1 失败；同 commit 孪生 run 43462103498 全绿                                                                                 | forks 池 worker 在汇总后收尾阶段异常退出（Windows runner 环境级），非任何用例断言失败；与已修复的 EPERM rename 偶发（run 43295320919）是两类问题 | 属基础设施偶发，不豁免任何用例；判定以同 commit 的权威 run 为准。再次复现且无绿色孪生 run 时按 flake 处理并升级归因 |
+| `packages/services/test/settingService.test.ts` + `packages/services/test/subagentsService.test.ts`（3-5 用例） | 本机全量并发回归（2026-11-14，工作流闭环分支）两文件共 5 用例失败（rename 收口等待、subagent 模型覆盖持久化/禁用态保留）；两文件单独跑全部全绿，改动未触及对应域                                                                                                                    | 全量并发下 FS/时序竞争（与已登记的 rename timing、subagentsSection 断言 flake 同模式）；非业务逻辑缺陷                                           | 暂不豁免（单独运行通过保持覆盖）；再次复现且单文件仍绿时按并发 flake 处理                                           |
 
 ## CI 最终状态（run `43108624641`，commit `6dc8110e`）
 
