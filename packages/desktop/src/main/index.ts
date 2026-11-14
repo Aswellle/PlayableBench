@@ -2511,6 +2511,9 @@ app.whenReady().then(async () => {
     },
     finalArmsCustomEventE2EEnabled: shouldEnableE2ETestBridge(process.env),
     webRemoteControlManager,
+    remoteDeviceRegistry: remoteControlDeviceConnection
+      ? new RemoteDeviceGate({ connection: remoteControlDeviceConnection })
+      : undefined,
     createRemoteWorkspaceSession: remoteSessionManager.createRemoteWorkspaceSession,
     getRemoteConnectionStats: remoteSessionManager.getRemoteConnectionStats,
     disposeRemoteWorkspaceSession: remoteSessionManager.disposeRemoteWorkspaceSession,

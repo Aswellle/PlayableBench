@@ -235,6 +235,14 @@ export const PlatformChannels = {
   StopWebRemoteControl: "zcode:stop-web-remote-control",
   /** 查询当前窗口的 Web 远程控制状态 */
   GetWebRemoteControlStatus: "zcode:get-web-remote-control-status",
+  /** 远程设备注册表：列出设备（pending/active/revoked，spec 09 §4） */
+  ListRemoteDevices: "zcode:list-remote-devices",
+  /** 远程设备注册表：确认绑定（能力档 + 有效期） */
+  ConfirmRemoteDevice: "zcode:confirm-remote-device",
+  /** 远程设备注册表：逐设备撤销（断开既有连接，立即生效） */
+  RevokeRemoteDevice: "zcode:revoke-remote-device",
+  /** 远程设备注册表：一键撤销全部活跃设备 */
+  RevokeAllRemoteDevices: "zcode:revoke-all-remote-devices",
   /** Main → Renderer：当前窗口 Web 远程控制状态变化 */
   WebRemoteControlStatusChanged: "zcode:web-remote-control-status-changed",
   /** 释放当前窗口里的远程 session */
@@ -846,6 +854,26 @@ export interface PlatformChannelMap {
   [PlatformChannels.GetWebRemoteControlStatus]: {
     request: void;
     response: WebRemoteControlStatus;
+  };
+  [PlatformChannels.ListRemoteDevices]: {
+    request: void;
+    response: import("./playablebench-remote.js").RemoteDevice[];
+  };
+  [PlatformChannels.ConfirmRemoteDevice]: {
+    request: {
+      deviceId: string;
+      tier: import("./playablebench-remote.js").RemoteDeviceTier;
+      expiresAt?: number;
+    };
+    response: import("./playablebench-remote.js").RemoteDevice | null;
+  };
+  [PlatformChannels.RevokeRemoteDevice]: {
+    request: { deviceId: string; reason: string; windowId?: number };
+    response: import("./playablebench-remote.js").RemoteDevice | null;
+  };
+  [PlatformChannels.RevokeAllRemoteDevices]: {
+    request: { reason: string };
+    response: { revoked: number };
   };
   [PlatformChannels.WebRemoteControlStatusChanged]: {
     request: WebRemoteControlStatus;

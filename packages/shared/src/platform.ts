@@ -748,15 +748,33 @@ export interface IPlatformService {
   ): Promise<WebRemoteControlStartOperationResult>;
 
   /** 撤销当前窗口的 Web 远程控制配对：断开连接并作废配对凭证，不自动重新配对 */
-  revokeWebRemoteControlPairing(
-    context: WebRemoteControlContext,
-  ): Promise<WebRemoteControlStatus>;
+  revokeWebRemoteControlPairing(context: WebRemoteControlContext): Promise<WebRemoteControlStatus>;
 
   /** 关闭当前窗口已开启的 Web 远程控制能力 */
   stopWebRemoteControl(): Promise<void>;
 
   /** 查询当前窗口 Web 远程控制状态 */
   getWebRemoteControlStatus(): Promise<WebRemoteControlStatus>;
+
+  /** 远程设备注册表：列出全部设备（spec 09 §4 设备管理）；桌面平台才提供 */
+  listRemoteDevices?(): Promise<import("./playablebench-remote.js").RemoteDevice[]>;
+
+  /** 远程设备注册表：确认绑定（能力档 + 有效期），未确认设备无法获得数据 */
+  confirmRemoteDevice?(input: {
+    deviceId: string;
+    tier: import("./playablebench-remote.js").RemoteDeviceTier;
+    expiresAt?: number;
+  }): Promise<import("./playablebench-remote.js").RemoteDevice | null>;
+
+  /** 远程设备注册表：逐设备撤销（立即失效；可选停掉对应窗口远控） */
+  revokeRemoteDevice?(input: {
+    deviceId: string;
+    reason: string;
+    windowId?: number;
+  }): Promise<import("./playablebench-remote.js").RemoteDevice | null>;
+
+  /** 远程设备注册表：一键撤销全部活跃设备 */
+  revokeAllRemoteDevices?(input: { reason: string }): Promise<{ revoked: number }>;
 
   /** 订阅当前窗口 Web 远程控制状态变化；旧平台可不实现，UI 会保留轮询兜底 */
   onWebRemoteControlStatusChanged?(handler: (status: WebRemoteControlStatus) => void): () => void;
