@@ -1929,6 +1929,8 @@ const zhCN: Record<string, string> = {
   "playablebench.inbox.failedReason": "处理失败：{error}（原始内容已保留，可重试）",
   "playablebench.radar.title": "信息雷达",
   "playablebench.runs.title": "运行与审批",
+  "playablebench.runs.events": "事件",
+  "playablebench.runs.noEvents": "暂无事件。",
   "playablebench.runs.list": "运行",
   "playablebench.runs.empty": "暂无运行记录。",
   "playablebench.runs.detail": "运行详情",

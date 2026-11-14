@@ -40,11 +40,25 @@ export interface AgentRunDetail {
   unfinishedToolExecutions: Array<Pick<PbToolExecution, "id" | "toolId" | "status">>;
 }
 
+/** 运行事件条目（spec 09 §2 run 摘要与事件；脱敏 payload 摘要）。 */
+export interface AgentRunEventItem {
+  sequence: number;
+  eventId: string;
+  eventType: string;
+  occurredAt: number;
+}
+
 export interface IAgentRunControlService {
   /** 运行概览（最近优先；pendingApprovals>0 的行置顶）。 */
   listRuns(limit?: number): Promise<AgentRunListItem[]>;
   /** 运行详情（审批卡全量）。 */
   getRunDetail(runId: string): Promise<AgentRunDetail | null>;
+  /** 运行事件（游标补齐：afterSequence 之后的事件，最新在尾部）。 */
+  listRunEvents(
+    runId: string,
+    afterSequence?: number,
+    limit?: number,
+  ): Promise<AgentRunEventItem[]>;
   /**
    * 审批决定：decisionDigest 与审批记录的 operationDigest 必须一致
    * （不一致拒绝 digest_mismatch）；并发/重复决定返回已收敛状态。

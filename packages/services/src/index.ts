@@ -95,6 +95,7 @@ export { IAgentRunControlService } from "./playablebench/agentRunControl.js";
 export type {
   AgentApprovalCard,
   AgentRunDetail,
+  AgentRunEventItem,
   AgentRunListItem,
 } from "./playablebench/agentRunControl.js";
 export type { IPlayableBenchService as IPlayableBenchServiceType } from "./playablebench/playablebench.js";
