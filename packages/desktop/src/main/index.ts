@@ -684,6 +684,14 @@ function forwardOffPeakRunResult(
 ): void {
   cronScheduler?.handleOffPeakRunResult(result);
 }
+function forwardRemoteApprovalCommandResult(result: {
+  requestId: string;
+  ok: boolean;
+  result?: { decided?: boolean; decision?: string; status?: string; reasonCode?: string };
+  error?: string;
+}): void {
+  webRemoteControlManagerRef.current?.handleRemoteApprovalCommandResult(result);
+}
 function wakeCronScheduler(automationId: string): void {
   cronScheduler?.wake(automationId);
 }
@@ -1010,6 +1018,18 @@ const webRemoteControlManager = createWebRemoteControlManager({
   taskFacade: remoteControlDeviceConnection
     ? new RemoteTaskFacade({ connection: remoteControlDeviceConnection })
     : undefined,
+  deliverRemoteApprovalCommand: (command) => {
+    const host = resolveCronDispatchHost();
+    if (!host) {
+      webRemoteControlManagerRef.current?.handleRemoteApprovalCommandResult({
+        requestId: command.requestId,
+        ok: false,
+        error: "no host process available",
+      });
+      return;
+    }
+    host.postMessage({ type: HostMessageTypes.RemoteApprovalCommand, ...command });
+  },
   logger,
   relayMessageLogger: webRemoteControlRelayLogger,
   platformHandlers: {
@@ -1937,6 +1957,7 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
             void appTelemetryCore.reportEvent(message.event).catch(() => {});
           },
           onCronRunResult: forwardCronRunResult,
+          onRemoteApprovalCommandResult: forwardRemoteApprovalCommandResult,
           onOffPeakRunResult: forwardOffPeakRunResult,
           onCronSchedulerWakeRequested: wakeCronScheduler,
           onOffPeakSchedulerWakeRequested: wakeOffPeakScheduler,

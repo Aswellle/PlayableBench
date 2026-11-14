@@ -722,6 +722,19 @@ export const hostFeedbackLogArchiveResultMessageSchema = z.object({
 
 // main → host：定时任务到点派发。会话内 cron 带 targetTaskId 时直接 sendPrompt 到当前会话；
 // 历史未绑定任务才 fallback createTask + sendPrompt 建 session。
+// main → host：手机远控审批/控制命令（PRD-07）。经服务注册表的
+// IAgentRunControlService 决策（digest 绑定 + CAS），结果按 requestId 回 main。
+export const hostRemoteApprovalCommandMessageSchema = z.object({
+  type: z.literal("remote-approval-command"),
+  requestId: nonEmptyStringSchema,
+  kind: z.enum(["decide", "control"]),
+  approvalId: z.string().optional(),
+  decision: z.enum(["approved", "denied"]).optional(),
+  decisionDigest: z.string().optional(),
+  runId: z.string().optional(),
+  action: z.enum(["pause", "resume", "cancel"]).optional(),
+});
+
 export const hostCronRunMessageSchema = z.object({
   type: z.literal("cron-run"),
   automationId: nonEmptyStringSchema,
@@ -862,6 +875,7 @@ export const hostIncomingMessageSchema = z.discriminatedUnion("type", [
   hostSessionMessageDeliverMessageSchema,
   hostSessionMessageDeliveryResultMessageSchema,
   hostFeedbackLogArchiveResultMessageSchema,
+  hostRemoteApprovalCommandMessageSchema,
   hostCronRunMessageSchema,
   hostOffPeakRunMessageSchema,
   hostBrowserExecuteResultMessageSchema,
@@ -1230,6 +1244,22 @@ export const hostFeedbackLogArchiveRequestResponseSchema = z.object({
 });
 
 // host → main：定时任务派发结果。ok=已成功创建 session 且 prompt 已发出。
+// host → main：手机远控审批/控制命令结果（requestId 对应回手机响应，PRD-07）。
+export const hostRemoteApprovalCommandResultResponseSchema = z.object({
+  type: z.literal("remote-approval-command-result"),
+  requestId: nonEmptyStringSchema,
+  ok: z.boolean(),
+  result: z
+    .object({
+      decided: z.boolean().optional(),
+      decision: z.string().optional(),
+      status: z.string().optional(),
+      reasonCode: z.string().optional(),
+    })
+    .optional(),
+  error: z.string().optional(),
+});
+
 export const hostCronRunResultResponseSchema = z.object({
   type: z.literal("cron-run-result"),
   runId: nonEmptyStringSchema,
@@ -1450,6 +1480,7 @@ export const hostResponseMessageSchema = z.discriminatedUnion("type", [
   hostNetworkTelemetryBatchResponseSchema,
   hostProviderProvisioningSourceChangedResponseSchema,
   hostProviderProvisioningExecutionResultResponseSchema,
+  hostRemoteApprovalCommandResultResponseSchema,
   hostCronRunResultResponseSchema,
   hostOffPeakRunResultResponseSchema,
   hostCronSchedulerWakeRequestResponseSchema,
