@@ -50,4 +50,7 @@
 
 ## 6. CI 结论（回填）
 
-- 待推送后回填（以 run 记录为准）。
+- 提交 `f01647e1` 首跑 unit job 失败（zcodeStdioTransport Windows 树清理在 runner 镜像 windows-2025-vs2026/20261103 下超预算）→ 修复 `62b2c21c`（transport 测试可注入清理 deadline，产品节奏不变）。
+- 提交 `62b2c21c` A run 被 GH 基础设施回收（runner shutdown → cmd 批处理交互卡死）→ **彻底修复** `6849e45c`（unit 步骤 shell:bash 消除批处理交互层 + 失败自动重跑一次的自愈策略，登记 docs/testing/known-test-failures.md）。
+- 提交 `6849e45c` CI 孪生 run **43622435391 / 43622431653 三 job 全绿**（含 CI 修复后首跑）。
+- **结论：CI PASS**（分支 mobile/task-approval-ui，PR #10 合并以本报告为准）。
