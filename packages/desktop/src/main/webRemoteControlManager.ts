@@ -138,6 +138,39 @@ interface WindowControlRuntime {
  * 设备确认状态与 scope，requestId 幂等防重放。未接线时行为保持既有
  * （测试 double / 旧 wire 不受影响）；生产由 desktop main 注入 services 实现。
  */
+/** 手机任务面（只读，spec 09 §2）：域操作由 services RemoteTaskFacade 实现。 */
+export interface WebRemoteControlTaskFacadeDependency {
+  taskList(
+    limit?: number,
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      templateId?: string;
+      startedAt?: number;
+      finishedAt?: number;
+      errorCode?: string;
+    }>
+  >;
+  runSummary(
+    runId: string,
+  ): Promise<{
+    run: unknown;
+    pendingApprovals: Array<{
+      id: string;
+      riskLevel?: string;
+      riskSummary?: string;
+      createdAt: number;
+    }>;
+  } | null>;
+  runEvents(
+    runId: string,
+    afterSequence?: number,
+    limit?: number,
+  ): Promise<Array<{ sequence: number; eventId: string; eventType: string; occurredAt: number }>>;
+}
+
 export interface WebRemoteControlDeviceGateDependency {
   authorizeCommand(input: {
     credentialHash: string;
@@ -179,6 +212,7 @@ interface WebRemoteControlManagerDependencies {
     error: (...args: unknown[]) => void;
   };
   deviceGate?: WebRemoteControlDeviceGateDependency;
+  taskFacade?: WebRemoteControlTaskFacadeDependency;
   relayMessageLogger?: {
     info: (...args: unknown[]) => void;
   };
@@ -1251,6 +1285,104 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
   }
 
   function routePayload(runtime: WindowControlRuntime, payload: WebRemoteControlAppPayload): void {
+    /** 手机任务面命令的授权 + 处理（授权拒绝回显错误响应）。 */
+    function routeTaskRequest(
+      runtime: WindowControlRuntime,
+      commandType: string,
+      payload: Extract<WebRemoteControlAppPayload, { requestId?: string }> & { zcode_type: string },
+      run: () => Promise<void>,
+    ): void {
+      const requestId = (payload as { requestId?: string }).requestId ?? "";
+      void authorizeOrReject(runtime, commandType, requestId, requestId).then((allowed) => {
+        if (!allowed) return;
+        void run().catch((error) => {
+          dependencies.logger.warn(
+            `[web-remote-control] task request failed window=${runtime.windowId} command=${commandType} error=${error instanceof Error ? error.message : String(error)}`,
+          );
+          sendAppPayload(runtime, {
+            zcode_type: "app-error",
+            requestId,
+            reason: "unexpected-error",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      });
+    }
+
+    async function handleTaskAppPayload(
+      runtime: WindowControlRuntime,
+      payload: WebRemoteControlTaskAppRequestPayload,
+    ): Promise<void> {
+      const facade = dependencies.taskFacade;
+      if (!facade) {
+        sendAppPayload(runtime, {
+          zcode_type: "app-error",
+          requestId: payload.requestId,
+          reason: "unsupported-action",
+          error: "task facade not available",
+        });
+        return;
+      }
+      switch (payload.zcode_type) {
+        case "task-list-request": {
+          const runs = await facade.taskList(payload.limit);
+          sendAppPayload(runtime, {
+            zcode_type: "task-list-response",
+            requestId: payload.requestId,
+            success: true,
+            result: { runs },
+          });
+          break;
+        }
+        case "run-summary-request": {
+          const summary = await facade.runSummary(payload.runId);
+          if (!summary) {
+            sendAppPayload(runtime, {
+              zcode_type: "app-error",
+              requestId: payload.requestId,
+              reason: "session-not-found",
+              error: `run not found: ${payload.runId}`,
+            });
+            break;
+          }
+          sendAppPayload(runtime, {
+            zcode_type: "run-summary-response",
+            requestId: payload.requestId,
+            success: true,
+            result: summary,
+          });
+          break;
+        }
+        case "run-events-request": {
+          const events = await facade.runEvents(
+            payload.runId,
+            payload.afterSequence,
+            payload.limit,
+          );
+          sendAppPayload(runtime, {
+            zcode_type: "run-events-response",
+            requestId: payload.requestId,
+            success: true,
+            result: { events },
+          });
+          break;
+        }
+        case "instruction-request":
+        case "approval-decision-request":
+        case "run-control-request":
+          // 执行类命令的 host 执行面随审批 UI 批次接入；本层不制造第二条命令写入路径。
+          sendAppPayload(runtime, {
+            zcode_type: "app-error",
+            requestId: payload.requestId,
+            reason: "unsupported-action",
+            error: "remote execution surface not available yet",
+          });
+          break;
+        default:
+          break;
+      }
+    }
+
     // 授权门注入时数据类 payload 先过准入门（异步）；未注入（测试 double/旧 wire）
     // 保持同步快路径，不改变既有时序语义。
     if (dependencies.deviceGate) {
@@ -1310,6 +1442,45 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
             void respondToWorkspaceReconnectRequest(runtime, payload);
           });
           return;
+        case "task-list-request":
+          routeTaskRequest(runtime, "task_list", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "run-summary-request":
+          routeTaskRequest(runtime, "run_summary", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "run-events-request":
+          routeTaskRequest(runtime, "run_events", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "instruction-request":
+          routeTaskRequest(runtime, "send_instruction", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "approval-decision-request":
+          routeTaskRequest(runtime, "approve_operation", payload, () =>
+            handleTaskAppPayload(runtime, payload as WebRemoteControlTaskAppRequestPayload),
+          );
+          return;
+        case "run-control-request": {
+          const controlPayload = payload as WebRemoteControlRunControlRequestPayload;
+          routeTaskRequest(
+            runtime,
+            controlPayload.action === "cancel"
+              ? "cancel_run"
+              : controlPayload.action === "pause"
+                ? "pause_run"
+                : "resume_run",
+            payload,
+            () => handleTaskAppPayload(runtime, controlPayload),
+          );
+          return;
+        }
         default:
           break;
       }

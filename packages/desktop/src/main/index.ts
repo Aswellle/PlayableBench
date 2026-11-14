@@ -64,7 +64,7 @@ import {
   normalizeRuntimeProcessEnv,
   setDataBaseDir,
 } from "@zcode/services/node";
-import { RemoteDeviceGate } from "@zcode/services/node";
+import { RemoteDeviceGate, RemoteTaskFacade, RunStoreConnection } from "@zcode/services/node";
 import {
   desktopMenuMessageIds,
   type Locale,
@@ -949,6 +949,14 @@ let startupOpenWorkspaceRequest: ExplicitStartupWorkspaceRequest | null =
       ? { path: startupDeepLinkWorkspacePath, source: "deep-link" }
       : null;
 
+// 远程设备准入门与手机任务面共享的 tasks-index 连接（同一库文件，只读面）。
+const remoteControlDeviceConnection = (() => {
+  try {
+    return new RunStoreConnection();
+  } catch {
+    return null;
+  }
+})();
 const webRemoteControlManager = createWebRemoteControlManager({
   getEndpointUrls: async () => {
     const derived = buildZCodeEndpointUrls(await resolveCurrentZCodeEndpointOrigin(), {
@@ -996,7 +1004,12 @@ const webRemoteControlManager = createWebRemoteControlManager({
     },
   },
   featureGate: createWebRemoteControlFeatureGate(),
-  deviceGate: new RemoteDeviceGate(),
+  deviceGate: remoteControlDeviceConnection
+    ? new RemoteDeviceGate({ connection: remoteControlDeviceConnection })
+    : undefined,
+  taskFacade: remoteControlDeviceConnection
+    ? new RemoteTaskFacade({ connection: remoteControlDeviceConnection })
+    : undefined,
   logger,
   relayMessageLogger: webRemoteControlRelayLogger,
   platformHandlers: {
