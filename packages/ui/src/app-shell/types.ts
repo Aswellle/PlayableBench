@@ -134,7 +134,9 @@ export type WorkspaceMainView =
   /** PlayableBench Inbox 页（Phase 2，spec 01 §4.2）。 */
   | "inbox"
   /** Information Radar 占位：Phase 4 前呈"未启用"状态，不冒充可用（spec 10 §6）。 */
-  | "radar";
+  | "radar"
+  /** PB 运行与审批面板（审批卡 digest 绑定，PRD-07）。 */
+  | "runs";
 
 export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackService"> {
   workspaceReadOnlyReason?: string;
@@ -287,9 +289,7 @@ export interface WorkspaceShellLayoutProps extends Omit<AppProps, "baseFeedbackS
   handleOpenWorkflowRunDirectory: (
     request: import("@/lib/workspaceSidePane.js").OpenScopedWorkflowRunDirectorySideTabRequest,
   ) => void;
-  handleOpenWorkflowActorSession: (
-    request: OpenScopedWorkflowActorSessionSideTabRequest,
-  ) => void;
+  handleOpenWorkflowActorSession: (request: OpenScopedWorkflowActorSessionSideTabRequest) => void;
   handleOpenWorkflowWorkspace: (request: OpenScopedWorkflowWorkspaceSideTabRequest) => void;
   handleOpenWorkflowArtifact: (request: OpenScopedWorkflowArtifactSideTabRequest) => void;
   handleCloseCodeViewer: () => void;
