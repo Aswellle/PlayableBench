@@ -114,6 +114,24 @@ export class RunRepo {
     return rows.map(rowToRun);
   }
 
+  /**
+   * 模板域幂等查询：同模板同输入的活跃 run（非终态）。研究工作流
+   * startResearchFromCard 以此做"同卡片已有进行中研究则复用"（spec 16 门禁：
+   * 重复触发有幂等保护）；needs_reconciliation 不算活跃复用对象（需人工决策）。
+   */
+  async findActiveRunByTemplateInput(templateId: string, inputRef: string): Promise<PbRun | null> {
+    await this.connection.ensureReady();
+    const row = this.getDatabase()
+      .prepare(
+        `SELECT * FROM pb_runs
+         WHERE template_id = ? AND input_ref = ?
+           AND status IN ('queued','planning','running','waiting_approval','verifying')
+         ORDER BY updated_at DESC LIMIT 1`,
+      )
+      .get(templateId, inputRef) as unknown as RunRow | undefined;
+    return row ? rowToRun(row) : null;
+  }
+
   async setRuntimeSession(id: string, runtimeSessionId: string): Promise<PbRun | null> {
     await this.connection.ensureReady();
     this.getDatabase()

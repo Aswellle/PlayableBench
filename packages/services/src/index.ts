@@ -90,6 +90,7 @@ export type {
 // 工厂函数（playablebenchService.ts，携带 node:sqlite 链）仅由 host/node.ts 导入。
 export { IPlayableBenchService } from "./playablebench/playablebench.js";
 export { IFeedService } from "./playablebench/feedService.js";
+export { IResearchService } from "./playablebench/researchService.js";
 export type { IPlayableBenchService as IPlayableBenchServiceType } from "./playablebench/playablebench.js";
 // 这里只能导出 descriptor 和类型。根 index 会被 renderer 经 value import 拉进浏览器包，
 // 若 value 导出 createOnboardingRecordService，会连带 fs/atomicFileUtils → @zcode/shared/node →

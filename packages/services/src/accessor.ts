@@ -48,6 +48,7 @@ import type { IWindowControllerService } from "./window-controller/windowControl
 import type { IOnboardingRecordService } from "./onboarding/onboardingRecord.js";
 import type { IPlayableBenchService } from "./playablebench/playablebenchService.js";
 import type { IFeedService } from "./playablebench/feedService.js";
+import type { IResearchService } from "./playablebench/researchService.js";
 import type { IConversationShareService } from "./conversation-share/conversationShare.js";
 
 /** UI 层消费的统一服务接口 */
@@ -66,6 +67,7 @@ export interface IServiceAccessor {
   /** PlayableBench 个人工作管理（Inbox/Projects/Today）；旧 wire/远端可不提供。 */
   readonly playableBenchService?: IPlayableBenchService;
   readonly feedService?: IFeedService;
+  readonly researchService?: IResearchService;
   readonly credentialService: ICredentialService;
   readonly broadcastService: IBroadcastService;
   readonly zcodeTaskService: IZCodeTaskService;
