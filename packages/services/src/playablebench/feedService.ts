@@ -7,6 +7,8 @@ import type {
   FeedItem,
   FeedMetricSnapshot,
   FeedSource,
+  ZCodeTaskMeta,
+  ZCodeTaskPriority,
 } from "@zcode/shared";
 import { ServiceChannels } from "@zcode/shared";
 import { createServiceDescriptor } from "../descriptors.js";
@@ -27,6 +29,14 @@ export interface FeedCardQueryParams {
   offset?: number;
 }
 
+/** 卡片转任务结果：reused 表示幂等命中既有转换（spec 16 门禁：重复触发有幂等保护）。 */
+export interface FeedCardTaskResult {
+  card: FeedItem;
+  inboxItemId: string;
+  task?: ZCodeTaskMeta;
+  reused: boolean;
+}
+
 export interface IFeedService {
   /** 添加来源（RSS/Atom URL；非 http(s) 立即拒绝）。 */
   addSource(input: { url: string; name?: string; pollIntervalSec?: number }): Promise<FeedSource>;
@@ -35,6 +45,18 @@ export interface IFeedService {
   removeSource(id: string): Promise<boolean>;
   /** 手动刷新（single-flight；暂停/停用返回 skipped）。 */
   refreshSource(id: string): Promise<FeedRefreshSummary>;
+  /**
+   * 卡片转任务（spec 08 §4、PRD-02）：原始标题+URL 逐字进 Inbox 后走既有
+   * capture→convert 写入路径；同卡片原始 URL 已有成功转换时幂等复用。
+   */
+  convertCardToTask(input: {
+    cardId: string;
+    workspacePath: string;
+    workspaceIdentity?: string;
+    title?: string;
+    priority?: ZCodeTaskPriority;
+    dueAt?: number;
+  }): Promise<FeedCardTaskResult>;
   /** 统一卡片列表（spec 08 §4 契约字段）。 */
   listCards(params?: FeedCardQueryParams): Promise<FeedItem[]>;
   getCardCounts(params?: { sourceId?: string }): Promise<{ unread: number; favorites: number; total: number }>;

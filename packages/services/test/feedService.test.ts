@@ -139,6 +139,41 @@ describe("IFeedService 服务面", () => {
     expect(await service.listCards()).toHaveLength(0);
   });
 
+  it("卡片转任务：逐字入 Inbox 后转任务；重复触发幂等复用（spec 16 门禁）", async () => {
+    const { service, dbPath } = makeHarness((request, response) => {
+      response.writeHead(200);
+      response.end(RSS_BODY);
+    });
+    const source = await service.addSource({ url: "https://blog.example.com/feed.xml" });
+    await service.refreshSource(source.id);
+    const cards = await service.listCards();
+    const card = cards[0]!;
+
+    const first = await service.convertCardToTask({
+      cardId: card.id,
+      workspacePath: "/tmp/ws",
+      priority: "high",
+    });
+    expect(first.reused).toBe(false);
+    expect(first.task?.title).toBe("第一条");
+    expect(first.task?.priority).toBe("high");
+
+    // 重复触发：同卡片原始 URL 已成功转换 → 幂等复用同一任务。
+    const second = await service.convertCardToTask({ cardId: card.id, workspacePath: "/tmp/ws" });
+    expect(second.reused).toBe(true);
+    expect(second.task?.taskId).toBe(first.task?.taskId);
+
+    // Inbox 原始输入逐字保留（标题 + 原文 URL 两行）；经独立实例读同一库文件。
+    const { InboxRepo } = await import("#src/session/inboxRepo.js");
+    const probeRepo = new InboxRepo(dbPath);
+    const probe = await probeRepo.get(first.inboxItemId);
+    expect(probe?.rawInput).toBe(`第一条\n${card.originalUrl}`);
+    expect(probe?.sourceUrl).toBe(card.originalUrl);
+
+    await expect(service.convertCardToTask({ cardId: "missing", workspacePath: "/tmp/ws" })).rejects
+      .toMatchObject({ kind: "card_not_found" });
+  });
+
   it("抓取失败：状态/错误码返回，旧内容保留（spec 16 门禁）", async () => {
     let fail = false;
     const { service } = makeHarness((request, response) => {

@@ -58,8 +58,8 @@ export interface Note {
   updatedAt: number;
 }
 
-/** project_links 的关联种类；task 关联指向 tasks-index 的 task_id。 */
-export type ProjectLinkKind = "task" | "note" | "inbox_item";
+/** project_links 的关联种类；task 关联指向 tasks-index 的 task_id，feed_item 关联指向 pb_feed_items.id。 */
+export type ProjectLinkKind = "task" | "note" | "inbox_item" | "feed_item";
 
 export interface ProjectLink {
   projectId: string;
