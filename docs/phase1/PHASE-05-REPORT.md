@@ -57,7 +57,9 @@
 
 ## 6. CI 结论（回填）
 
-- 待推送后回填（以 run 记录为准）。
+- 首跑 run 43571273956 unit job 失败 1 例：`reactStableReferences.test.ts`——RadarView 向 memo 组件 RadarSourcesPanel 传内联函数 props（4 处）。修复：四个 handler 提为 useCallback、projects 投影 useMemo（`57b1cefb`）。
+- 提交 `57b1cefb` CI 孪生 run **43574539568 / 43574535332 三 job 全绿**。
+- **结论：CI PASS**（分支 phase5/workflow-closed-loop，PR #7 合并以本报告为准）。
 
 ## 7. 已知问题与遗留
 
