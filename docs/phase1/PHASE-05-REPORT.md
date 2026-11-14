@@ -41,10 +41,11 @@
 
 | 检查 | 结果 |
 |---|---|
-| services 全量回归（unit project） | 待回填（见下方 §4b） |
-| tsc -b 全仓（pnpm typecheck） | 0 错误 |
-| oxlint（逐提交改动文件） | 0 错误（node.ts/WorkspaceShellLayout 既有 3 处 unused-vars 警告与本次无关） |
+| services 全量回归（unit project，276 文件 3109 用例） | 首轮 3088 过/5 败：3 例为 tasksDatabaseMigration 硬编码账本计数与表清单（已修复）；settingService/subagentsService 4 例单文件复跑全绿 → 并发环境 flake（登记观察项）。第二轮 3092 过/1 败（同 flake 复现，单独全绿） |
+| tsc -b 全仓（pnpm typecheck，含格式化后复验） | 0 错误 |
+| oxlint（逐提交改动文件；全仓 0 错误/74 警告均为既有） | 0 错误 |
 | `architecture:check --changed` | OK，violations 0 |
+| oxfmt（本闭环改动 31 文件） | 已格式化（仓库基线 2423 文件未格式化为既有状态，CI quality 不含 fmt） |
 
 ## 5. 门禁对照（spec 16）
 
