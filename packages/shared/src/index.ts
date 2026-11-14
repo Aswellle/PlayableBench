@@ -91,6 +91,7 @@ export * from "./zcode-protocol-legacy-types.js";
 export * from "./zcode-task-types-core.js";
 export * from "./playablebench-domain.js";
 export * from "./playablebench-runs.js";
+export * from "./playablebench-feed.js";
 export * from "./task-realtime-core.js";
 export * from "./remote-workspace-identity.js";
 export * from "./zcode-api-retry-status.js";

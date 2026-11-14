@@ -177,6 +177,8 @@ export const ServiceChannels = {
   OnboardingRecord: "onboarding-record",
   /** PlayableBench 个人工作管理服务（Inbox/Projects/Today，Phase 2） */
   PlayableBench: "playablebench",
+  /** PlayableBench 信息雷达服务（FeedSource/卡片/收藏，Phase 4） */
+  Feed: "feed",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];

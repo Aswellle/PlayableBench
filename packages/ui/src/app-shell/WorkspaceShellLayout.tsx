@@ -54,7 +54,7 @@ import type {
 import { AutomationsMainBreadcrumbFrame } from "@/settings/AutomationsMainBreadcrumbFrame.js";
 import { TodayView } from "@/playablebench/TodayView.js";
 import { InboxView } from "@/playablebench/InboxView.js";
-import { RadarPlaceholderView } from "@/playablebench/RadarPlaceholderView.js";
+import { RadarView } from "@/playablebench/RadarView.js";
 import { PluginStorePage } from "@/settings/PluginStorePage.js";
 import { TaskFindDialog } from "@/quickpick/TaskFindDialog.js";
 import { WebRemoteControlMobileShell } from "@/WebRemoteControlMobileShell.js";
@@ -2221,7 +2221,7 @@ export const WorkspaceShellLayout = memo(
                           ) : workspaceMainView === "inbox" ? (
                             <InboxView workspacePath={workspaceAbsPath} />
                           ) : (
-                            <RadarPlaceholderView />
+                            <RadarView />
                           )}
                         </ScopedErrorBoundary>
                       </div>
