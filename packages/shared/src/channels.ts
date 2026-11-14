@@ -181,6 +181,8 @@ export const ServiceChannels = {
   Feed: "feed",
   /** PlayableBench 研究工作流服务（卡片→Agent 研究运行，模板/摘要） */
   Research: "research",
+  /** PB Agent 运行控制与审批（桌面审批面板/手机审批卡片共用决策路径） */
+  AgentRunControl: "agent-run-control",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];
@@ -634,6 +636,8 @@ export const HostMessageTypes = {
   BotRemoteWorkspaceReconnectResult: "bot-remote-workspace-reconnect-result",
   /** main → host：Bot 远端 workspace 连接状态查询结果 */
   BotRemoteWorkspaceConnectionStatusResult: "bot-remote-workspace-connection-status-result",
+  /** main → host：手机远控审批/控制命令（经 IAgentRunControlService 决策，PRD-07） */
+  RemoteApprovalCommand: "remote-approval-command",
   /** main → host：Bot 远端 workspace runtime RPC 端口 */
   BotRemoteWorkspaceRuntimePort: "bot-remote-workspace-runtime-port",
   /** main → host：把 session message 投递到该 host 管理的目标 session */
@@ -664,6 +668,8 @@ export const HostMessageTypes = {
 
 /** host process → main process 的反馈消息类型 */
 export const HostResponseTypes = {
+  /** host → main：手机远控审批/控制命令结果（requestId 对应回手机响应） */
+  RemoteApprovalCommandResult: "remote-approval-command-result",
   DatabaseStartupState: "database-startup-state",
   /** window Host → main：按 requestId 上报远程连接过程日志 */
   RemoteWorkspaceConnectionLog: "remote-workspace-connection-log",

@@ -140,9 +140,7 @@ interface WindowControlRuntime {
  */
 /** 手机任务面（只读，spec 09 §2）：域操作由 services RemoteTaskFacade 实现。 */
 export interface WebRemoteControlTaskFacadeDependency {
-  taskList(
-    limit?: number,
-  ): Promise<
+  taskList(limit?: number): Promise<
     Array<{
       id: string;
       title: string;
@@ -153,9 +151,7 @@ export interface WebRemoteControlTaskFacadeDependency {
       errorCode?: string;
     }>
   >;
-  runSummary(
-    runId: string,
-  ): Promise<{
+  runSummary(runId: string): Promise<{
     run: unknown;
     pendingApprovals: Array<{
       id: string;
@@ -213,6 +209,16 @@ interface WebRemoteControlManagerDependencies {
   };
   deviceGate?: WebRemoteControlDeviceGateDependency;
   taskFacade?: WebRemoteControlTaskFacadeDependency;
+  /** 手机审批/控制命令投递到 host（main→host 消息桥；未接线时命令回 unsupported）。 */
+  deliverRemoteApprovalCommand?: (command: {
+    requestId: string;
+    kind: "decide" | "control";
+    approvalId?: string;
+    decision?: "approved" | "denied";
+    decisionDigest?: string;
+    runId?: string;
+    action?: "pause" | "resume" | "cancel";
+  }) => void;
   relayMessageLogger?: {
     info: (...args: unknown[]) => void;
   };
@@ -395,6 +401,13 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
   }
   const availableTasksByWindowId = new Map<number, WebRemoteControlTaskTarget[]>();
   const pushedWorkspaceListSignaturesByWindowId = new Map<number, string>();
+  /** 手机审批/控制命令的待决映射（requestId → 手机响应上下文，PRD-07）。 */
+  interface RemoteApprovalPending {
+    windowId: number;
+    kind: "approval-decision" | "run-control";
+    requestId: string;
+  }
+  const remoteApprovalPendingByRequestId = new Map<string, RemoteApprovalPending>();
   const startupRestoreContextPromise = dependencies.startupRestoreStorageProvider
     .load()
     .catch((error) => {
@@ -1367,15 +1380,53 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
           });
           break;
         }
-        case "instruction-request":
         case "approval-decision-request":
-        case "run-control-request":
-          // 执行类命令的 host 执行面随审批 UI 批次接入；本层不制造第二条命令写入路径。
+        case "run-control-request": {
+          // 审批决定/控制命令经 main→host 桥走 IAgentRunControlService（单一决策
+          // 路径：digest 绑定 + CAS + V4 resolveInteraction）；deliver 未接线时诚实回 unsupported。
+          const deliver = dependencies.deliverRemoteApprovalCommand;
+          if (!deliver) {
+            sendAppPayload(runtime, {
+              zcode_type: "app-error",
+              requestId: payload.requestId,
+              reason: "unsupported-action",
+              error: "remote execution surface not available",
+            });
+            break;
+          }
+          remoteApprovalPendingByRequestId.set(payload.requestId, {
+            windowId: runtime.windowId,
+            kind:
+              payload.zcode_type === "approval-decision-request"
+                ? "approval-decision"
+                : "run-control",
+            requestId: payload.requestId,
+          });
+          if (payload.zcode_type === "approval-decision-request") {
+            deliver({
+              requestId: payload.requestId,
+              kind: "decide",
+              approvalId: payload.approvalId,
+              decision: payload.decision,
+              ...(payload.operationDigest ? { decisionDigest: payload.operationDigest } : {}),
+            });
+          } else {
+            deliver({
+              requestId: payload.requestId,
+              kind: "control",
+              runId: payload.runId,
+              action: payload.action,
+            });
+          }
+          break;
+        }
+        case "instruction-request":
+          // 追加指令由 replayable 链路覆盖（手机输入→sendText），不经此面。
           sendAppPayload(runtime, {
             zcode_type: "app-error",
             requestId: payload.requestId,
             reason: "unsupported-action",
-            error: "remote execution surface not available yet",
+            error: "use the session input path for instructions",
           });
           break;
         default:
@@ -1674,6 +1725,52 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
   }
 
   return {
+    /**
+     * host → main 的手机审批/控制命令结果（PRD-07）：按 requestId 找回手机
+     * 响应上下文并回包；窗口已停止（撤销/关闭）时丢弃（运行时事实已不存在）。
+     */
+    handleRemoteApprovalCommandResult(result: {
+      requestId: string;
+      ok: boolean;
+      result?: { decided?: boolean; decision?: string; status?: string; reasonCode?: string };
+      error?: string;
+    }): void {
+      const pending = remoteApprovalPendingByRequestId.get(result.requestId);
+      if (!pending) return;
+      remoteApprovalPendingByRequestId.delete(result.requestId);
+      const runtime = runtimes.get(pending.windowId);
+      if (!runtime) return;
+      if (pending.kind === "approval-decision") {
+        sendAppPayload(runtime, {
+          zcode_type: "approval-decision-response",
+          requestId: pending.requestId,
+          success: result.ok && (result.result?.decided ?? false),
+          ...(result.ok && result.result
+            ? {
+                result: {
+                  decided: result.result.decided ?? false,
+                  decision: result.result.decision ?? "",
+                },
+              }
+            : {}),
+          ...(!result.ok || result.error
+            ? { error: result.error ?? "remote decision failed" }
+            : {}),
+        });
+        return;
+      }
+      sendAppPayload(runtime, {
+        zcode_type: "run-control-response",
+        requestId: pending.requestId,
+        success:
+          result.ok &&
+          (result.result?.status === "accepted" || result.result?.status === "duplicate"),
+        ...(result.ok && result.result
+          ? { result: { status: result.result.status ?? "", reasonCode: result.result.reasonCode } }
+          : {}),
+        ...(!result.ok || result.error ? { error: result.error ?? "remote control failed" } : {}),
+      });
+    },
     authorizeStart,
     async startAuthorized(
       windowId: number,

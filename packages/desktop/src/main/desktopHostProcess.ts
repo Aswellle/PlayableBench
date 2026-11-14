@@ -220,6 +220,13 @@ export function spawnHostProcess(
       error?: string;
       failureKind?: "transient" | "permanent";
     }) => void;
+    /** host → main：手机远控审批/控制命令结果，转交 manager 回手机（PRD-07）。 */
+    onRemoteApprovalCommandResult?: (result: {
+      requestId: string;
+      ok: boolean;
+      result?: { decided?: boolean; decision?: string; status?: string; reasonCode?: string };
+      error?: string;
+    }) => void;
     /** host → main：闲时任务派发结果，转交给 scheduler 结算（与 cron 独立）。 */
     onOffPeakRunResult?: (result: {
       offPeakTaskId: string;
@@ -558,6 +565,16 @@ export function spawnHostProcess(
         sessionId: result.data.sessionId,
         error: result.data.error,
         failureKind: result.data.failureKind,
+      });
+      return;
+    }
+
+    if (result.data.type === HostResponseTypes.RemoteApprovalCommandResult) {
+      dependencies.onRemoteApprovalCommandResult?.({
+        requestId: result.data.requestId,
+        ok: result.data.ok,
+        result: result.data.result,
+        error: result.data.error,
       });
       return;
     }

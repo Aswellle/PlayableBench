@@ -44,6 +44,7 @@ import {
   IOnboardingRecordService,
   IWindowControllerService,
   IConversationShareService,
+  IAgentRunControlService,
   IZCodeAgentService,
   IZCodeTaskService,
   IZCodeSessionService,
@@ -2465,6 +2466,70 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
 
   if (msg.type === HostMessageTypes.PluginSandboxRegisterResult) {
     pluginSandboxRegistrationBridge.accept(msg);
+    return;
+  }
+
+  // 手机远控审批/控制命令（PRD-07）：经服务注册表的 IAgentRunControlService
+  // 决策（digest 绑定 + CAS + V4 resolveInteraction），结果按 requestId 回 main
+  // 再回手机。host 未就绪/服务缺失按 transient 失败回执。
+  if (msg.type === HostMessageTypes.RemoteApprovalCommand) {
+    const request = msg as {
+      type: string;
+      requestId: string;
+      kind: "decide" | "control";
+      approvalId?: string;
+      decision?: "approved" | "denied";
+      decisionDigest?: string;
+      runId?: string;
+      action?: "pause" | "resume" | "cancel";
+    };
+    const respond = (ok: boolean, result?: unknown, error?: string) => {
+      parentPort.postMessage({
+        type: HostResponseTypes.RemoteApprovalCommandResult,
+        requestId: request.requestId,
+        ok,
+        result,
+        ...(error ? { error } : {}),
+      });
+    };
+    if (databaseStartup?.coordinator.snapshot.phase !== "ready") {
+      respond(false, undefined, "Local database startup is not ready");
+      return;
+    }
+    const runControl = activeServices?.getOptional(IAgentRunControlService);
+    if (!runControl) {
+      respond(false, undefined, "Agent run control service not available");
+      return;
+    }
+    void (async () => {
+      try {
+        if (request.kind === "decide") {
+          if (
+            !request.approvalId ||
+            (request.decision !== "approved" && request.decision !== "denied")
+          ) {
+            respond(false, undefined, "invalid decide command");
+            return;
+          }
+          respond(
+            true,
+            await runControl.decideApproval(
+              request.approvalId,
+              request.decision,
+              request.decisionDigest,
+            ),
+          );
+          return;
+        }
+        if (!request.runId || !request.action) {
+          respond(false, undefined, "invalid control command");
+          return;
+        }
+        respond(true, await runControl.controlRun(request.runId, request.action));
+      } catch (error) {
+        respond(false, undefined, error instanceof Error ? error.message : String(error));
+      }
+    })();
     return;
   }
 
