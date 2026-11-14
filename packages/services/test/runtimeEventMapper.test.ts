@@ -252,4 +252,42 @@ describe("RuntimeEventMapper", () => {
     expect(outcome.errors.some((e) => e.includes("illegal transition"))).toBe(true);
     expect((await runRepo.getRun(run.id))?.status).toBe("queued");
   });
+
+  it("assistantText 完成态捕获 message.final（限长）；重放幂等；流式/空文本不落", async () => {
+    const { mapper, runRepo } = makeStore();
+    const run = await runRepo.createRun({ goal: "目标" });
+    await runRepo.setRuntimeSession(run.id, "sess-1");
+    const longText = "结论。引用 https://example.com/src。".padEnd(9000, "尾");
+    const assistantRow = {
+      rowId: 7,
+      turnId: "turn-9",
+      createdAt: 9,
+      createdAtSeq: 9,
+      kind: "assistantText" as const,
+      text: longText,
+      state: "complete" as const,
+      model: "glm-test",
+    };
+    await mapper.applySnapshot("sess-1", makeSnapshot({ toolRows: [assistantRow] }));
+    let events = await runRepo.listRunEvents(run.id, { limit: 50 });
+    const final = events.filter((e) => e.eventType === "message.final");
+    expect(final).toHaveLength(1);
+    const payload = JSON.parse(final[0]?.payloadJson ?? "{}") as { text: string; model: string };
+    expect(payload.text.startsWith("结论。")).toBe(true);
+    expect(payload.text.endsWith("…[截断]")).toBe(true);
+    expect(payload.model).toBe("glm-test");
+
+    // 重放同快照：确定性 eventId 幂等吸收，不产生第二条。
+    await mapper.applySnapshot("sess-1", makeSnapshot({ toolRows: [assistantRow] }));
+    events = await runRepo.listRunEvents(run.id, { limit: 50 });
+    expect(events.filter((e) => e.eventType === "message.final")).toHaveLength(1);
+
+    // 流式行与空文本不落事件。
+    await mapper.applyDeltas("sess-1", [
+      { op: "row.appended", row: { ...assistantRow, rowId: 8, text: "半截", state: "streaming" as const } },
+      { op: "row.appended", row: { ...assistantRow, rowId: 9, text: "", state: "complete" as const } },
+    ], { frameSeq: 1 });
+    events = await runRepo.listRunEvents(run.id, { limit: 50 });
+    expect(events.filter((e) => e.eventType === "message.final")).toHaveLength(1);
+  });
 });

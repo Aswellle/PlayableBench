@@ -4,6 +4,7 @@
 // outcome.errors，不中断帧泵（重复投递由 (run_id, event_id) 唯一约束幂等吸收）。
 // 只处理已注册为 PB run 的会话（getRunBySessionId 未命中即跳过，不污染上游会话）。
 import type {
+  AssistantTextRow,
   ConversationDelta,
   ConversationSnapshot,
   SessionPhase,
@@ -36,6 +37,9 @@ const TOOL_ROW_STATUS_TO_EXECUTION: Readonly<Record<ToolCallRow["status"], PbToo
   error: "failed",
   cancelled: "cancelled",
 };
+
+/** message.final 捕获的正文限长（摘要提取只取尾部结论段；防止事件表膨胀）。 */
+const MESSAGE_FINAL_MAX_CHARS = 8000;
 
 export interface RuntimeEventMapperDeps {
   runRepo: RunRepo;
@@ -208,7 +212,40 @@ export class RuntimeEventMapper {
         outcome.errors.push(`toolRow ${row.toolCallId}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+    for (const row of snapshot.rows.window) {
+      if (row.kind === "assistantText") {
+        try {
+          await this.captureFinalMessage(runId, row as AssistantTextRow, outcome);
+        } catch (error) {
+          outcome.errors.push(`assistantText ${String(row.rowId)}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
     return outcome;
+  }
+
+  /**
+   * assistantText 行完成态捕获（限长、非流式逐 chunk）：事件确定性 eventId
+   * （rowId 幂等），摘要提取从 pb_run_events 读最终回复（spec 08 §9 摘要可追溯）。
+   */
+  private async captureFinalMessage(runId: string, row: AssistantTextRow, outcome: MapperOutcome): Promise<void> {
+    if (row.state !== "complete" || !row.text) return;
+    const text = row.text.length > MESSAGE_FINAL_MAX_CHARS
+      ? `${row.text.slice(0, MESSAGE_FINAL_MAX_CHARS)}…[截断]`
+      : row.text;
+    const eventId = `evt:${runId}:message-final:${row.rowId}`;
+    const result = await this.deps.runRepo.appendRunEvent(runId, {
+      eventId,
+      eventType: "message.final",
+      payloadJson: JSON.stringify({
+        rowId: row.rowId,
+        text,
+        ...(row.model ? { model: row.model } : {}),
+      }),
+    });
+    if (!result.deduplicated) {
+      outcome.applied.push({ eventId, disposition: "applied" });
+    }
   }
 
   private async applyToolRow(runId: string, row: ToolCallRow, outcome: MapperOutcome): Promise<void> {
@@ -284,6 +321,10 @@ export class RuntimeEventMapper {
         }
         if ((delta.op === "row.appended" || delta.op === "row.upserted") && delta.row.kind === "toolCall") {
           await this.applyToolRow(runId, delta.row as ToolCallRow, outcome);
+          continue;
+        }
+        if ((delta.op === "row.appended" || delta.op === "row.upserted") && delta.row.kind === "assistantText") {
+          await this.captureFinalMessage(runId, delta.row as AssistantTextRow, outcome);
         }
       } catch (error) {
         outcome.errors.push(`delta[${index}] ${delta.op}: ${error instanceof Error ? error.message : String(error)}`);

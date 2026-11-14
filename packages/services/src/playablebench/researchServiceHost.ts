@@ -3,15 +3,17 @@
 // goal 经 untrusted 分隔块组装（goalComposer）；启动幂等：同卡片活跃 run 直接
 // 复用（spec 16 门禁）。内置 research_article 模板版本 v1：capabilities 白名单
 // 与工具策略取交集，外部内容不能提升工具权限（SR-12）。
-import type { PbRun, PbWorkflowTemplate } from "@zcode/shared";
+import type { PbFeedSummary, PbRun, PbSummaryCitation, PbWorkflowTemplate } from "@zcode/shared";
 import type { IAgentRuntimePort } from "#src/playablebench/agentRuntimePort.js";
 import { composeResearchGoal } from "#src/playablebench/goalComposer.js";
 import type { IResearchService, ResearchRunView, ResearchStartResult } from "#src/playablebench/researchService.js";
 import { FeedItemRepo } from "#src/session/feedItemRepo.js";
 import { FeedSourceRepo } from "#src/session/feedSourceRepo.js";
+import { FeedSummaryRepo } from "#src/session/feedSummaryRepo.js";
 import { RunRepo } from "#src/session/runRepo.js";
 import { RunStoreConnection } from "#src/session/runStoreConnection.js";
 import { WorkflowTemplateRepo } from "#src/session/workflowTemplateRepo.js";
+import { PB_RUN_TERMINAL_STATUSES } from "@zcode/shared";
 
 export const RESEARCH_TEMPLATE_ID = "research_article";
 export const RESEARCH_TEMPLATE_VERSION = "v1";
@@ -35,6 +37,7 @@ export function createResearchService(options: ResearchServiceHostOptions): IRes
   const sources = new FeedSourceRepo(connection);
   const templates = new WorkflowTemplateRepo(connection);
   const runs = new RunRepo(connection);
+  const summaries = new FeedSummaryRepo(connection);
 
   async function ensureResearchTemplate(): Promise<PbWorkflowTemplate> {
     // 种子只在缺失时插入：版本发布后不可静默改变旧 run 的执行定义（spec 05 §8）。
@@ -112,5 +115,78 @@ export function createResearchService(options: ResearchServiceHostOptions): IRes
         pendingApprovalCount: snapshot.pendingApprovals.length,
       };
     },
+
+    async syncSummary(input): Promise<PbFeedSummary> {
+      const card = await items.get(input.cardId);
+      if (!card) {
+        throw Object.assign(new Error(`卡片不存在: ${input.cardId}`), { kind: "card_not_found" });
+      }
+      const run = await runs.getRun(input.runId);
+      if (!run) {
+        throw Object.assign(new Error(`运行不存在: ${input.runId}`), { kind: "run_not_found" });
+      }
+      if (run.templateId !== RESEARCH_TEMPLATE_ID || run.inputRef !== input.cardId) {
+        throw Object.assign(new Error("运行与卡片不匹配"), { kind: "run_card_mismatch" });
+      }
+      if (!(PB_RUN_TERMINAL_STATUSES as readonly string[]).includes(run.status)) {
+        throw Object.assign(new Error(`运行尚未结束: ${run.status}`), { kind: "run_not_terminal" });
+      }
+      const events = await runs.listRunEvents(input.runId, { limit: 500 });
+      const finalMessage = [...events]
+        .reverse()
+        .find((event) => event.eventType === "message.final");
+      if (!finalMessage?.payloadJson) {
+        throw Object.assign(new Error("运行事件流中没有可提取的最终回复"), { kind: "summary_not_available" });
+      }
+      let payload: { text?: string; model?: string };
+      try {
+        payload = JSON.parse(finalMessage.payloadJson) as { text?: string; model?: string };
+      } catch {
+        throw Object.assign(new Error("最终回复事件载荷损坏"), { kind: "summary_not_available" });
+      }
+      if (!payload.text) {
+        throw Object.assign(new Error("最终回复为空"), { kind: "summary_not_available" });
+      }
+      const model = input.model ?? payload.model ?? "unknown";
+      const modelVersion = input.modelVersion ?? "";
+      // 缓存命中（同内容同模型）直接复用；否则由最终回复文本建摘要。
+      const created = await summaries.create({
+        feedItemId: card.id,
+        ...(card.contentHash ? { contentHash: card.contentHash } : {}),
+        sourceUrl: card.originalUrl,
+        title: card.title,
+        model,
+        modelVersion,
+        summaryText: payload.text,
+        citations: extractCitations(payload.text),
+        ...(run.status === "completed" ? { runId: run.id } : {}),
+      });
+      return created.summary;
+    },
+
+    async listSummaries(cardId): Promise<PbFeedSummary[]> {
+      const card = await items.get(cardId);
+      if (!card) return [];
+      return summaries.listForCard({
+        feedItemId: card.id,
+        ...(card.contentHash ? { contentHash: card.contentHash } : {}),
+      });
+    },
   };
+}
+
+/** 从摘要文本提取引用 URL（带上下文片段）；重复 URL 去重，保序。 */
+function extractCitations(text: string): PbSummaryCitation[] {
+  const citations: PbSummaryCitation[] = [];
+  const seen = new Set<string>();
+  const pattern = /https?:\/\/[^\s)>"'`\]]+/g;
+  for (const match of text.matchAll(pattern)) {
+    const url = match[0];
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const start = Math.max(0, match.index - 60);
+    const context = text.slice(start, (match.index ?? 0) + url.length + 60).trim();
+    citations.push({ url, text: context });
+  }
+  return citations;
 }
