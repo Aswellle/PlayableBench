@@ -84,6 +84,11 @@ export function RadarView(props: { workspacePath: string }) {
     return map;
   }, [sources]);
 
+  const projectOptions = useMemo(
+    () => projects.map((project) => ({ id: project.id, name: project.name })),
+    [projects],
+  );
+
   const setCardFeedback = useCallback((cardId: string, text: string) => {
     setFeedbackByCard((prev) => ({ ...prev, [cardId]: text }));
   }, []);
@@ -239,6 +244,28 @@ export function RadarView(props: { workspacePath: string }) {
     [researchService],
   );
 
+  const handleAddSourceClick = useCallback(() => {
+    void handleAddSource();
+  }, [handleAddSource]);
+  const handleRefreshSourceClick = useCallback(
+    (id: string) => {
+      void handleRefreshSource(id);
+    },
+    [handleRefreshSource],
+  );
+  const handleTogglePauseClick = useCallback(
+    (source: FeedSource) => {
+      void handleTogglePause(source);
+    },
+    [handleTogglePause],
+  );
+  const handleRemoveSourceClick = useCallback(
+    (source: FeedSource) => {
+      void handleRemoveSource(source);
+    },
+    [handleRemoveSource],
+  );
+
   const filterButton = (value: CardFilter, label: string) => (
     <Button
       type="button"
@@ -268,10 +295,10 @@ export function RadarView(props: { workspacePath: string }) {
         adding={adding}
         refreshingId={refreshingId}
         onDraftUrlChange={setDraftUrl}
-        onAddSource={() => void handleAddSource()}
-        onRefreshSource={(id) => void handleRefreshSource(id)}
-        onTogglePause={(source) => void handleTogglePause(source)}
-        onRemoveSource={(source) => void handleRemoveSource(source)}
+        onAddSource={handleAddSourceClick}
+        onRefreshSource={handleRefreshSourceClick}
+        onTogglePause={handleTogglePauseClick}
+        onRemoveSource={handleRemoveSourceClick}
       />
 
       <section
@@ -311,7 +338,7 @@ export function RadarView(props: { workspacePath: string }) {
                 key={item.id}
                 item={item}
                 sourceName={sourceNameById.get(item.sourceId) ?? item.sourceId}
-                projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+                projects={projectOptions}
                 busy={busyByCard[item.id] ?? false}
                 feedback={feedbackByCard[item.id] ?? ""}
                 researchStatus={researchStatusByCard[item.id] ?? ""}
