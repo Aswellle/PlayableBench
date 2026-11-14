@@ -22,6 +22,12 @@ interface ZCodeStdioTransportOptions {
   onStderrLine?: (line: string) => void;
   ownedProcessGroupId?: number;
   ownedProcessStartedAtMs?: number;
+  /**
+   * Windows 清理绝对 deadline 的注入点（毫秒，从 cleanup 起点计）。默认走
+   * 产品常量（Host 3.5s service phase 预算，不可放宽）；仅测试在慢 runner 上
+   * 验证"最终回收成功"语义时注入更长预算——不改变产品清理节奏。
+   */
+  windowsCleanupDeadlineOverrideMs?: number;
 }
 
 const STDIO_EOF_EXIT_WAIT_MS = 1_800;
@@ -142,9 +148,10 @@ export class ZCodeStdioTransport implements ZCodeProtocolTransport {
     const windowsCleanupDeadlineAtMs =
       process.platform === "win32"
         ? cleanupStartedAtMs +
-          forceBudgetMs +
-          PROCESS_TREE_WINDOWS_TASKKILL_TIMEOUT_MS +
-          PROCESS_TREE_WINDOWS_EXIT_OBSERVATION_GRACE_MS
+          (this.options?.windowsCleanupDeadlineOverrideMs ??
+            forceBudgetMs +
+              PROCESS_TREE_WINDOWS_TASKKILL_TIMEOUT_MS +
+              PROCESS_TREE_WINDOWS_EXIT_OBSERVATION_GRACE_MS)
         : undefined;
     this.cleanupProcessTreeSnapshot ??= await this.captureCleanupSnapshot(
       windowsCleanupDeadlineAtMs,

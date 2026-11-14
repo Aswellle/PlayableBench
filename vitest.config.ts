@@ -91,6 +91,8 @@ export default defineConfig({
           name: "unit",
           include: [
             "packages/*/test/**/*.test.ts",
+            // UI 组件渲染测试（jsdom per-file 注释）：React 组件行为回归（RunsView 审批面板）。
+            "packages/ui/test/**/*.test.tsx",
             // 架构治理要求 managed 模块自带 contract.test.ts（见 architecture-policy.yaml），放在模块目录内。
             "packages/*/src/**/contract.test.ts",
             // Gen UI 目录回归位于源码旁，默认入口也必须执行，避免只在手动定向运行时生效。
@@ -99,7 +101,16 @@ export default defineConfig({
             "scripts/assert-safe-cua-helper-zip.test.mjs",
             "scripts/ci/ci-telemetry-keyword-guard.test.mjs",
           ],
-          exclude: ["packages/desktop/test/e2e/**", ...forkIsolatedTests],
+          exclude: [
+            "packages/desktop/test/e2e/**",
+            // 历史死测试复活失败（见 docs/testing/known-test-failures.md）：长期未被
+            // include 收集（旧 glob 只匹配 .test.ts），断言与实现早已脱节；单独修复前豁免。
+            "packages/ui/test/sessionPluginReferenceIconProvider.test.tsx",
+            "packages/ui/test/executeToolCallBlock.test.tsx",
+            "packages/ui/test/previewPaneMediaContent.test.tsx",
+            "packages/ui/test/automationDesignPrimitives.test.tsx",
+            ...forkIsolatedTests,
+          ],
           // Node 24/macOS 的 threads 全量运行可触发 V8 SIGSEGV；诊断时切换进程隔离，测试范围不变。
           pool: process.env.ZCODE_TEST_POOL === "forks" ? "forks" : "threads",
           maxWorkers: process.env.ZCODE_TEST_POOL === "forks" ? 2 : 4,

@@ -12,7 +12,12 @@ import {
   ShieldAlert,
   Square,
 } from "lucide-react";
-import type { AgentApprovalCard, AgentRunDetail, AgentRunListItem } from "@zcode/services";
+import type {
+  AgentApprovalCard,
+  AgentRunDetail,
+  AgentRunEventItem,
+  AgentRunListItem,
+} from "@zcode/services";
 import { Button } from "@/components/ui/button.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -33,6 +38,7 @@ export function RunsView() {
   const [runs, setRuns] = useState<AgentRunListItem[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AgentRunDetail | null>(null);
+  const [events, setEvents] = useState<AgentRunEventItem[] | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
 
@@ -53,10 +59,13 @@ export function RunsView() {
     async (runId: string | null) => {
       if (!service || !runId) {
         setDetail(null);
+        setEvents(null);
         return;
       }
       try {
         setDetail(await service.getRunDetail(runId));
+        // 事件流脱敏（只透出时序与类型，spec 05 §6）；与详情并行拉取。
+        setEvents(await service.listRunEvents(runId));
       } catch (error) {
         logger.warn("[playablebench] 运行详情加载失败", {
           error: error instanceof Error ? error.message : String(error),
@@ -263,6 +272,31 @@ export function RunsView() {
                   onDecide={handleDecide}
                 />
               ))
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h3 className="text-ui-base/relaxed font-medium text-foreground">
+              {intl.formatMessage({ id: "playablebench.runs.events" })}
+            </h3>
+            {events === null ? null : events.length === 0 ? (
+              <p className="text-ui-base/relaxed text-foreground-subtle">
+                {intl.formatMessage({ id: "playablebench.runs.noEvents" })}
+              </p>
+            ) : (
+              <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto rounded-lg border border-border/60 p-2">
+                {[...events].reverse().map((event) => (
+                  <li
+                    key={`${event.sequence}:${event.eventId}`}
+                    className="flex items-center justify-between gap-2 text-ui-base/relaxed text-foreground-subtle"
+                  >
+                    <span className="truncate">{event.eventType}</span>
+                    <span className="shrink-0">
+                      {new Date(event.occurredAt).toLocaleTimeString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </section>

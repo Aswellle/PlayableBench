@@ -5,6 +5,7 @@ import type { PbApproval } from "@zcode/shared";
 import type {
   AgentApprovalCard,
   AgentRunDetail,
+  AgentRunEventItem,
   AgentRunListItem,
   IAgentRunControlService,
 } from "#src/playablebench/agentRunControl.js";
@@ -87,6 +88,21 @@ export function createAgentRunControlService(
       }
       // 未决审批的行置顶（审批面板的操作优先级）。
       return items.sort((a, b) => b.pendingApprovals - a.pendingApprovals);
+    },
+
+    async listRunEvents(runId, afterSequence, limit): Promise<AgentRunEventItem[]> {
+      const events = await runRepo.listRunEvents(runId, { limit: Math.min(limit ?? 100, 500) });
+      const filtered =
+        afterSequence !== undefined
+          ? events.filter((event) => event.sequence > afterSequence)
+          : events;
+      // 脱敏：事件负载可能含工具入参/内容原文，面板只透出时序与类型（spec 05 §6）。
+      return filtered.map((event) => ({
+        sequence: event.sequence,
+        eventId: event.eventId,
+        eventType: event.eventType,
+        occurredAt: event.occurredAt,
+      }));
     },
 
     async getRunDetail(runId): Promise<AgentRunDetail | null> {

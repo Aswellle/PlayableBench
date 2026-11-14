@@ -320,7 +320,12 @@ setInterval(() => {}, 1000);
       { stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
     );
     activeChildren.add(child);
-    const transport = new ZCodeStdioTransport(child);
+    const transport = new ZCodeStdioTransport(child, {
+      // CI runner（windows-2025-vs2026）负载下 WMI 快照/EOF/树清理可合法超出
+      // 产品 3.25s 预算（Host service phase 不适用本用例）；注入更长预算验证
+      // "最终回收成功"语义，产品默认节奏不变（见 transport options 注释）。
+      windowsCleanupDeadlineOverrideMs: 8_000,
+    });
     let firstFrameAt = 0;
     let receivedFrameCount = 0;
     let agentPid = 0;

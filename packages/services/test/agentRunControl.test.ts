@@ -118,6 +118,21 @@ describe("PB 运行控制与审批服务", () => {
     expect(again.error).toBe("approval_already_decided");
   });
 
+  it("事件流脱敏透出（只含时序与类型）；游标补齐", async () => {
+    const { service, firstRunId, runRepo } = await makeService();
+    await runRepo.appendRunEvent(firstRunId, {
+      eventId: `evt:${firstRunId}:extra`,
+      eventType: "message.final",
+      payloadJson: JSON.stringify({ text: "机密正文", model: "m" }),
+    });
+    const events = await service.listRunEvents(firstRunId);
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    // 脱敏：不透出 payload 原文。
+    expect(JSON.stringify(events)).not.toContain("机密正文");
+    const tail = await service.listRunEvents(firstRunId, events[0]?.sequence);
+    expect(tail.every((event) => event.sequence > (events[0]?.sequence ?? 0))).toBe(true);
+  });
+
   it("控制命令映射端口：取消 accepted；暂停无快照诚实拒绝", async () => {
     const { service, firstRunId, sentCommands } = await makeService();
     const pause = await service.controlRun(firstRunId, "pause");

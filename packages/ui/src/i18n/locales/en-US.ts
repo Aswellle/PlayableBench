@@ -2067,6 +2067,8 @@ const enUS: Record<string, string> = {
     "Processing failed: {error} (raw content preserved, retry available)",
   "playablebench.radar.title": "Information Radar",
   "playablebench.runs.title": "Runs & approvals",
+  "playablebench.runs.events": "Events",
+  "playablebench.runs.noEvents": "No events yet.",
   "playablebench.runs.list": "Runs",
   "playablebench.runs.empty": "No runs yet.",
   "playablebench.runs.detail": "Run detail",
