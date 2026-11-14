@@ -91,6 +91,8 @@ export default defineConfig({
           name: "unit",
           include: [
             "packages/*/test/**/*.test.ts",
+            // UI 组件渲染测试（jsdom per-file 注释）：React 组件行为回归（RunsView 审批面板）。
+            "packages/ui/test/**/*.test.tsx",
             // 架构治理要求 managed 模块自带 contract.test.ts（见 architecture-policy.yaml），放在模块目录内。
             "packages/*/src/**/contract.test.ts",
             // Gen UI 目录回归位于源码旁，默认入口也必须执行，避免只在手动定向运行时生效。
