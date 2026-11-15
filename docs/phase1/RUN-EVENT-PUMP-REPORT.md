@@ -41,4 +41,6 @@
 
 ## 6. CI 结论（回填）
 
-- 待推送后回填（以 run 记录为准）。
+- 首跑 run 43744774588：18048 用例全通过但 4 个 unhandled rejection（帧泵 `start()` 首次同步缺 catch——测试临时目录删除后 listRuns ENOENT）使 worker 判红 → 修复 `6d078069`（首次同步容错，登记观察项）。
+- 提交 `6d078069` CI 孪生 run **43751618974 / 43751615571 三 job 全绿**。
+- **结论：CI PASS**（分支 prd06/run-event-pump，PR #11 合并以本报告为准）。
