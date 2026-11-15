@@ -5,9 +5,14 @@
 // 本文件可被上层（含未来 renderer）安全引入。
 import type { PbApproval, PbRun, PbRunStatus, PbToolExecution } from "@zcode/shared";
 
-
 /** V4 ACK 六态直通（accepted/rejected/stale/duplicate/noop/failed），不二次发明。 */
-export type AgentRuntimeCommandStatus = "accepted" | "rejected" | "stale" | "duplicate" | "noop" | "failed";
+export type AgentRuntimeCommandStatus =
+  | "accepted"
+  | "rejected"
+  | "stale"
+  | "duplicate"
+  | "noop"
+  | "failed";
 
 /**
  * 启动策略上下文（SR-02）：PB 新启动路径必须显式指定 mode；
@@ -122,4 +127,9 @@ export interface IAgentRuntimePort {
   /** 产品策略侧工具投影（spec 05 §4）；实现见 toolPolicy.ts。 */
   listAvailableTools(runId: string): Promise<AgentToolDescriptor[]>;
   health(): Promise<RuntimeHealth>;
+  /**
+   * 帧泵面（PRD-06 接线，Host 专用）：事件映射层观察到快照后登记 CAS revision，
+   * 使 requestPause/resume 的前置条件满足。renderer/手机不调用。
+   */
+  observeSnapshotRevision(runId: string, sessionId: string, revision: number): void;
 }
