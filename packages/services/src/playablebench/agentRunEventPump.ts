@@ -63,7 +63,10 @@ export class AgentRunEventPump {
   start(): void {
     if (this.started) return;
     this.started = true;
-    void this.syncWorkspaceSubscriptions();
+    // 首次同步同样容错：数据库目录被删/暂不可用（如测试装配后清理临时目录）
+    // 时泵保持沉默，由下一轮 sync 重试——unhandled rejection 会让整个
+    // vitest worker 判红（run 43744774588 实证 4 errors 全部来自此处）。
+    this.syncWorkspaceSubscriptions().catch(() => undefined);
     if (this.syncIntervalMs > 0) {
       this.syncTimer = setInterval(() => {
         if (this.syncing) return;

@@ -62,6 +62,11 @@
 - build（递归全仓构建）：**PASS**
 - 八轮迭代与根因全部记录于 `docs/phase1/WP2-completion-report.md` §3；Phase 1 完成报告见 `docs/phase1/PHASE-01-REPORT.md`。
 
+## 观察项补充（2026-11-16）
+
+- `packages/services/test/localServicesRemoteAuthority.test.ts` 在与 `agentRunEventPump.test.ts` 同 worker 并发时曾出现 30s 超时（run 43744774588）——根因是当时帧泵 `start()` 首次同步缺 catch，测试临时目录删除后的 listRuns ENOENT 变 unhandled rejection 使 worker 异常退出殃及同 worker 测试；catch 修复（0598ffe6 后续提交）后两连跑全绿，不再豁免。
+- 同 run 另有 `Worker exited unexpectedly` ×1（forks 池收尾，既有观察项模式）。
+
 ## 基础设施事件自愈策略（2026-11-15 起生效）
 
 | 症状                                                                                                               | 根因链（run 43618471322 重跑实证）                                                                                                                                                     | 修复                                                                                                                                                         |
