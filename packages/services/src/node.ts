@@ -2350,6 +2350,9 @@ export function createLocalServices(options: {
     });
   // Run 域与研究工作流共享的 tasks-index 连接（RunRepo/ToolExecutionRepo/ApprovalRepo 同库）。
   const pbAgentRuntimeConnection = new RunStoreConnection();
+  // 注册链上的懒工厂（如 OffPeak）会各自创建 tasks-index sqlite repo；先收集到本数组，
+  // services 集合建好后在 return 前统一登记进 sharedSqliteRepos 侧表
+  const sqliteReposToClose: Array<{ close(): void }> = [];
   const pbAgentRuntimePort = createAgentRuntimePort({
     agentService: zcodeAgentService,
     runRepo: new RunRepo(pbAgentRuntimeConnection),
@@ -2359,11 +2362,13 @@ export function createLocalServices(options: {
   // PRD-06 帧泵接线：订阅活动 PB run 工作区的 V4 下行帧，经 RuntimeEventMapper
   // 实时持久化 run 状态迁移/审批建档/message.final；快照 revision 桥回端口
   // CAS 表（pauseGoal/resumeGoal 前置条件）。非 PB 会话帧按 sessionId 过滤丢弃。
+  // pump/mapper/端口共用同一 RunRepo 实例（单连接；dispose 链统一关闭）。
+  const pbPumpRunRepo = new RunRepo(pbAgentRuntimeConnection);
   const pbRunEventPump = new AgentRunEventPump({
     frameSource: zcodeAgentService,
-    runRepo: new RunRepo(pbAgentRuntimeConnection),
+    runRepo: pbPumpRunRepo,
     mapper: new RuntimeEventMapper({
-      runRepo: new RunRepo(pbAgentRuntimeConnection),
+      runRepo: pbPumpRunRepo,
       toolExecutions: new ToolExecutionRepo(pbAgentRuntimeConnection),
       approvals: new ApprovalRepo(pbAgentRuntimeConnection),
       onSnapshotRevision: (runId, sessionId, revision) =>
@@ -2404,9 +2409,6 @@ export function createLocalServices(options: {
         client: conversationShareClient,
         artifactSource: createLocalConversationShareArtifactSource(),
       });
-  // 注册链上的懒工厂（如 OffPeak）会各自创建 tasks-index sqlite repo；先收集到本数组，
-  // services 集合建好后在 return 前统一登记进 sharedSqliteRepos 侧表
-  const sqliteReposToClose: Array<{ close(): void }> = [];
   const marketingAssets = createMarketingAssetRegistry({
     allowLoopback: ZCODE_ENV === "test" || process.env.NODE_ENV === "development",
   });
@@ -2758,6 +2760,14 @@ export function createLocalServices(options: {
 
   // 见 sharedSqliteRepos 声明处注释：登记全部 tasks-index sqlite 句柄，dispose 链统一关闭
   sqliteReposToClose.push(taskIndexRepo);
+  // 帧泵的常驻 timer 与 workspace 订阅随 dispose 停止，连接关闭释放 tasks-index
+  // 句柄（否则测试清理临时库会因句柄/timer 存活而 EBUSY）。
+  sqliteReposToClose.push({
+    close: () => {
+      pbRunEventPump.stop();
+      pbAgentRuntimeConnection.close();
+    },
+  });
   sharedSqliteRepos.set(services, sqliteReposToClose);
   return services;
 }
