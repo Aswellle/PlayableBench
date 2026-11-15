@@ -381,6 +381,8 @@ import { IAgentRunControlService } from "./playablebench/agentRunControl.js";
 import { createAgentRunControlService } from "./playablebench/agentRunControlHost.js";
 import { IResearchService } from "./playablebench/researchService.js";
 import { createAgentRuntimePort } from "./playablebench/agentRuntimePortAdapter.js";
+import { AgentRunEventPump } from "./playablebench/agentRunEventPump.js";
+import { RuntimeEventMapper } from "./playablebench/runtimeEventMapper.js";
 import { RunStoreConnection } from "./session/runStoreConnection.js";
 import { RunRepo } from "./session/runRepo.js";
 import { ToolExecutionRepo } from "./session/toolExecutionRepo.js";
@@ -2354,6 +2356,22 @@ export function createLocalServices(options: {
     toolExecutions: new ToolExecutionRepo(pbAgentRuntimeConnection),
     approvals: new ApprovalRepo(pbAgentRuntimeConnection),
   });
+  // PRD-06 帧泵接线：订阅活动 PB run 工作区的 V4 下行帧，经 RuntimeEventMapper
+  // 实时持久化 run 状态迁移/审批建档/message.final；快照 revision 桥回端口
+  // CAS 表（pauseGoal/resumeGoal 前置条件）。非 PB 会话帧按 sessionId 过滤丢弃。
+  const pbRunEventPump = new AgentRunEventPump({
+    frameSource: zcodeAgentService,
+    runRepo: new RunRepo(pbAgentRuntimeConnection),
+    mapper: new RuntimeEventMapper({
+      runRepo: new RunRepo(pbAgentRuntimeConnection),
+      toolExecutions: new ToolExecutionRepo(pbAgentRuntimeConnection),
+      approvals: new ApprovalRepo(pbAgentRuntimeConnection),
+      onSnapshotRevision: (runId, sessionId, revision) =>
+        pbAgentRuntimePort.observeSnapshotRevision(runId, sessionId, revision),
+    }),
+    syncIntervalMs: 15_000,
+  });
+  pbRunEventPump.start();
   const fileService = createFileService({
     workspaceFileSearchFilter: options?.workspaceFileSearchFilter,
   });
