@@ -1,7 +1,12 @@
 // PlayableBench 信息雷达服务实现（Host 侧；携带 node:sqlite 链，不进 renderer barrel）。
 // 组装 FeedSourceRepo/FeedItemRepo/connector/调度器；来源 URL 添加时即做
 // scheme/字面量校验（SSRF 防线的前置反馈，抓取时仍逐跳校验）。
-import type { FeedItem, FeedMetricSnapshot, ZCodeTaskPriority } from "@zcode/shared";
+import type {
+  FeedConnectorType,
+  FeedItem,
+  FeedMetricSnapshot,
+  ZCodeTaskPriority,
+} from "@zcode/shared";
 import type {
   FeedCardQueryParams,
   FeedCardTaskResult,
@@ -10,6 +15,11 @@ import type {
 } from "#src/playablebench/feedService.js";
 import type { FeedConnector } from "#src/playablebench/feedConnector.js";
 import { createRssAtomConnector } from "#src/playablebench/feedConnector.js";
+import {
+  createFeedConnector,
+  GITHUB_RELEASES_TERMS_URL,
+  HACKERNEWS_TERMS_URL,
+} from "#src/playablebench/feedConnectorsRegistry.js";
 import { FetchGuardError, assertFetchableUrl } from "#src/playablebench/fetchGuard.js";
 import { FeedScheduler } from "#src/playablebench/feedScheduler.js";
 import type { IPlayableBenchService } from "#src/playablebench/playablebench.js";
@@ -44,6 +54,11 @@ export function createFeedService(options: FeedServiceHostOptions = {}): FeedSer
     sources,
     items,
     connector,
+    // rss_atom 保持注入的 connector（测试 loopback/定制实现）；新类型走 registry 工厂。
+    connectorResolver: (type) =>
+      type === "rss_atom"
+        ? connector
+        : createFeedConnector(type as Parameters<typeof createFeedConnector>[0]),
     ...(options.now ? { now: options.now } : {}),
   });
   // 卡片转任务复用 PlayableBench 既有 capture→convert 写入路径（单一写入方）；
@@ -68,14 +83,24 @@ export function createFeedService(options: FeedServiceHostOptions = {}): FeedSer
         }
         throw error;
       }
+      // connector 类型：显式指定优先；URL 识别 github.com 仓库 → Releases Atom（spec 19 §2 A/P0-P1）。
+      const connectorType: FeedConnectorType =
+        input.connectorType ??
+        (/^https?:\/\/github\.com\/[^/]+\/[^/]+/i.test(input.url) ? "github_releases" : "rss_atom");
+      const typedConnector = createFeedConnector(connectorType);
       const name = input.name?.trim() || parsed.hostname;
       const source = await sources.add({
-        connectorType: "rss_atom",
+        connectorType,
         name,
         url: input.url,
         ...(input.pollIntervalSec ? { pollIntervalSec: input.pollIntervalSec } : {}),
-        capabilities: connector.getCapabilities(),
-        termsUrl: undefined,
+        capabilities: typedConnector.getCapabilities(),
+        termsUrl:
+          connectorType === "github_releases"
+            ? GITHUB_RELEASES_TERMS_URL
+            : connectorType === "hackernews"
+              ? HACKERNEWS_TERMS_URL
+              : undefined,
       });
       return source;
     },

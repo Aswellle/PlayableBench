@@ -11,6 +11,8 @@ export interface FeedSchedulerOptions {
   sources: FeedSourceRepo;
   items: FeedItemRepo;
   connector: FeedConnector;
+  /** 按来源 connectorType 路由连接器（缺省回落到 connector 单例；多类型来源时必配）。 */
+  connectorResolver?: (type: string) => FeedConnector;
   now?: () => number;
   /** 分批补采批大小（spec 08 §5：应用恢复时分批，不同时打满全部源）。 */
   batchSize?: number;
@@ -21,7 +23,13 @@ export interface FeedSchedulerOptions {
 
 export interface FeedRefreshResult {
   sourceId: string;
-  status: "fetched" | "not_modified" | "failed" | "skipped_paused" | "skipped_in_flight" | "skipped_disabled";
+  status:
+    | "fetched"
+    | "not_modified"
+    | "failed"
+    | "skipped_paused"
+    | "skipped_in_flight"
+    | "skipped_disabled";
   outcome?: FeedFetchOutcome;
   newItems?: number;
   /** 下次允许抓取的时间（退避/429 后被推迟；正常轮询由 pollIntervalSec 决定）。 */
@@ -83,7 +91,9 @@ export class FeedScheduler {
       if (backoffUntil !== undefined && nowMs < backoffUntil) {
         return { sourceId, status: "skipped_in_flight", nextEligibleAt: backoffUntil };
       }
-      const outcome = await this.options.connector.fetch(source);
+      const connector =
+        this.options.connectorResolver?.(source.connectorType) ?? this.options.connector;
+      const outcome = await connector.fetch(source);
       if (outcome.status === "fetched" && outcome.items) {
         let newItems = 0;
         for (const item of outcome.items) {
@@ -102,6 +112,22 @@ export class FeedScheduler {
             seenAt: nowMs,
           });
           if (upsert.created) newItems += 1;
+          // 原生指标采样（spec 08 §8）：按 sourceItemId 匹配本批次指标，
+          // metric_origin=native_source；无指标来源（rss_atom）为空数组跳过。
+          const nativeMetrics = (outcome.metrics ?? []).filter(
+            (metric) => metric.sourceItemId === item.sourceItemId,
+          );
+          for (const metric of nativeMetrics) {
+            await this.options.items.addMetric({
+              feedItemId: upsert.item.id,
+              sourceId,
+              sampledAt: nowMs,
+              metricName: metric.name,
+              metricValue: metric.value,
+              metricUnit: metric.unit,
+              metricOrigin: "native_source",
+            });
+          }
         }
         await this.options.sources.recordAttempt(sourceId, {
           ok: true,

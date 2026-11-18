@@ -4,6 +4,7 @@
 // 卡片契约（spec 08 §4）：原始标题/来源/作者/发布时间/firstSeenAt/摘要/
 // 原文链接；互动指标带指标名与采样时刻，不允许无来源的"热度"。
 import type {
+  FeedConnectorType,
   FeedItem,
   FeedMetricSnapshot,
   FeedSource,
@@ -45,7 +46,13 @@ export interface FeedCardTaskResult {
 
 export interface IFeedService {
   /** 添加来源（RSS/Atom URL；非 http(s) 立即拒绝）。 */
-  addSource(input: { url: string; name?: string; pollIntervalSec?: number }): Promise<FeedSource>;
+  addSource(input: {
+    url: string;
+    name?: string;
+    pollIntervalSec?: number;
+    /** 显式 connector 类型；缺省按 URL 识别（github.com 仓库 → Releases Atom，其余 rss_atom）。 */
+    connectorType?: FeedConnectorType;
+  }): Promise<FeedSource>;
   listSources(): Promise<FeedSource[]>;
   pauseSource(id: string, paused: boolean): Promise<FeedSource | null>;
   removeSource(id: string): Promise<boolean>;

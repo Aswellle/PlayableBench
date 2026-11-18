@@ -3,12 +3,13 @@
 // single-flight、分批补采、失败不清空旧内容、去重入库。全部用本机服务器。
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   canonicalizeUrl,
   computeContentHash,
   createRssAtomConnector,
 } from "#src/playablebench/feedConnector.js";
+import type { FeedConnector } from "#src/playablebench/feedConnector.js";
 import { FeedScheduler } from "#src/playablebench/feedScheduler.js";
 import { FeedItemRepo } from "#src/session/feedItemRepo.js";
 import { FeedSourceRepo } from "#src/session/feedSourceRepo.js";
@@ -305,5 +306,59 @@ describe("FeedScheduler", () => {
     // 刚抓取过（lastAttemptAt 刚更新）→ 下一次 sweep 到期判定跳过。
     const secondSweep = await scheduler.refreshDueSources();
     expect(secondSweep.attempted).toBe(0);
+  });
+});
+
+describe("调度器原生指标采样（spec 08 §8，Phase 7）", () => {
+  it("fetched 后按 sourceItemId 匹配落 FeedMetricSnapshot（native_source）；重复采样同刻去重", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zcode-feed-metrics-"));
+    tempDirs.push(dir);
+    const connection = new RunStoreConnection(join(dir, "tasks-index.sqlite"));
+    const sources = new FeedSourceRepo(connection);
+    const items = new FeedItemRepo(connection);
+    const now = vi.fn(() => 1_700_000_000_000);
+    const connector: FeedConnector = {
+      connectorType: "hackernews",
+      getCapabilities: () => ({
+        fetchItems: "supported",
+        nativeHotList: "supported",
+        nativeMetrics: ["score"],
+        requiresCredential: false,
+        requiresExternalService: false,
+        lastValidatedAt: "2026-11-16",
+        limitations: [],
+      }),
+      async fetch() {
+        return {
+          status: "fetched" as const,
+          httpStatus: 200,
+          items: [
+            { sourceItemId: "hn-1", title: "故事一", linkUrl: "https://example.com/hn1" },
+          ],
+          metrics: [
+            { sourceItemId: "hn-1", name: "score", value: "88", unit: "points" },
+            { sourceItemId: "hn-1", name: "comment_count", value: "12", unit: "comments" },
+            // 非本批次条目的指标被丢弃（不悬空）。
+            { sourceItemId: "hn-ghost", name: "score", value: "1", unit: "points" },
+          ],
+        };
+      },
+    };
+    const source = await sources.add({ connectorType: "hackernews", name: "HN", url: "https://hacker-news.firebaseio.com/v0/topstories.json" });
+    const scheduler = new FeedScheduler({
+      sources,
+      items,
+      connector: createRssAtomConnector(),
+      connectorResolver: (type) => (type === "hackernews" ? connector : createRssAtomConnector()),
+      now,
+    });
+    const result = await scheduler.refreshSource(source.id);
+    expect(result.status).toBe("fetched");
+    const cards = await items.listCards();
+    expect(cards).toHaveLength(1);
+    const metrics = await items.listMetrics(cards[0]!.id);
+    expect(metrics.map((metric) => metric.metricName).sort()).toEqual(["comment_count", "score"]);
+    expect(metrics.every((metric) => metric.metricOrigin === "native_source")).toBe(true);
+    expect(metrics.find((metric) => metric.metricName === "score")?.metricValue).toBe("88");
   });
 });

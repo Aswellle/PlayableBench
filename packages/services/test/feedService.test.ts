@@ -216,6 +216,22 @@ describe("IFeedService 服务面", () => {
     }
   });
 
+  it("addSource connector 类型：github.com 仓库 URL 识别为 Releases Atom 并落条款；能力声明随类型", async () => {
+    const { service } = makeHarness(() => undefined);
+    const source = await service.addSource({ url: "https://github.com/zai-org/ZCode/releases" });
+    expect(source.connectorType).toBe("github_releases");
+    expect(source.capabilities?.nativeMetrics).toEqual([]);
+    expect(source.termsUrl).toContain("github.com");
+    // 显式类型覆盖 URL 识别。
+    const hn = await service.addSource({
+      url: "https://hacker-news.firebaseio.com/v0/topstories.json",
+      connectorType: "hackernews",
+    });
+    expect(hn.connectorType).toBe("hackernews");
+    expect(hn.capabilities?.nativeMetrics).toEqual(["score", "comment_count"]);
+    expect(hn.termsUrl).toContain("ycombinator.com");
+  });
+
   it("抓取失败：状态/错误码返回，旧内容保留（spec 16 门禁）", async () => {
     let fail = false;
     const { service } = makeHarness((request, response) => {
