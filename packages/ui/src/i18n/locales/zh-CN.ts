@@ -1959,6 +1959,8 @@ const zhCN: Record<string, string> = {
   "playablebench.radar.filterAll": "全部",
   "playablebench.radar.filterFavorites": "收藏",
   "playablebench.radar.filterUnread": "未读",
+  "playablebench.radar.filterTrending": "热门（原生）",
+  "playablebench.radar.nativeRanking": "来源原生排名",
   "playablebench.radar.favorite": "收藏",
   "playablebench.radar.markRead": "标记已读",
   "playablebench.radar.read": "已读",

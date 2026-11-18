@@ -3,7 +3,12 @@
 // 摘要/原文链接；互动数据必须带指标名与采样时刻，不允许无来源的"热度"。
 // A 级首批 connector：RSS/Atom（spec 19 §2）；GitHub/HN 官方源下批。
 
-export type FeedConnectorType = "rss_atom" | "custom_json" | "manual_url";
+export type FeedConnectorType =
+  | "rss_atom"
+  | "github_releases"
+  | "hackernews"
+  | "custom_json"
+  | "manual_url";
 
 /** 运行时能力声明（spec 19 §3）：以实际检测结果为准，不是静态文案。 */
 export type FeedCapabilityState = "supported" | "partial" | "unsupported" | "unknown";

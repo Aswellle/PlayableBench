@@ -12,7 +12,7 @@ import { logger } from "@/logger.js";
 import { RadarCard } from "@/playablebench/RadarCard.js";
 import { RadarSourcesPanel } from "@/playablebench/RadarSourcesPanel.js";
 
-type CardFilter = "all" | "favorites" | "unread";
+type CardFilter = "all" | "favorites" | "unread" | "trending";
 
 function formatTime(value: number): string {
   return new Date(value).toLocaleString();
@@ -50,7 +50,9 @@ export function RadarView(props: { workspacePath: string }) {
             ? { favoritesOnly: true, limit: 100 }
             : filter === "unread"
               ? { unreadOnly: true, limit: 100 }
-              : { limit: 100 },
+              : filter === "trending"
+                ? { trending: true, limit: 100 }
+                : { limit: 100 },
         ),
         service.getCardCounts(),
       ]);
@@ -339,6 +341,7 @@ export function RadarView(props: { workspacePath: string }) {
                 item={item}
                 sourceName={sourceNameById.get(item.sourceId) ?? item.sourceId}
                 projects={projectOptions}
+                trendingMode={filter === "trending"}
                 busy={busyByCard[item.id] ?? false}
                 feedback={feedbackByCard[item.id] ?? ""}
                 researchStatus={researchStatusByCard[item.id] ?? ""}

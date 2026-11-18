@@ -11,12 +11,20 @@ import { RunStoreConnection } from "#src/session/runStoreConnection.js";
 
 const tempDirs: string[] = [];
 
-function makeStore(): { sources: FeedSourceRepo; items: FeedItemRepo; connection: RunStoreConnection } {
+function makeStore(): {
+  sources: FeedSourceRepo;
+  items: FeedItemRepo;
+  connection: RunStoreConnection;
+} {
   const dir = mkdtempSync(join(tmpdir(), "zcode-feed-repo-"));
   tempDirs.push(dir);
   // 强制注入：本测试不得触碰真实 ~/.zcode/v2 库。
   const connection = new RunStoreConnection(join(dir, "tasks-index.sqlite"));
-  return { sources: new FeedSourceRepo(connection), items: new FeedItemRepo(connection), connection };
+  return {
+    sources: new FeedSourceRepo(connection),
+    items: new FeedItemRepo(connection),
+    connection,
+  };
 }
 
 afterEach(() => {
@@ -42,7 +50,10 @@ const capabilities = {
   limitations: ["upstream rate limiting may apply"],
 } as const;
 
-async function seedSource(sources: FeedSourceRepo, url = "https://example.com/feed.xml"): Promise<string> {
+async function seedSource(
+  sources: FeedSourceRepo,
+  url = "https://example.com/feed.xml",
+): Promise<string> {
   const source = await sources.add({
     connectorType: "rss_atom",
     name: "示例源",
@@ -99,7 +110,9 @@ describe("FeedSourceRepo", () => {
       canonicalUrl: "https://example.com/a",
       title: "标题",
     });
-    await items.addMetric({ feedItemId: "", sourceId: id, metricName: "x", metricOrigin: "native_source" }).catch(() => undefined);
+    await items
+      .addMetric({ feedItemId: "", sourceId: id, metricName: "x", metricOrigin: "native_source" })
+      .catch(() => undefined);
     const removed = await sources.remove(id);
     expect(removed).toBe(true);
     const remainingItems = connection
@@ -227,5 +240,78 @@ describe("FeedItemRepo 去重与卡片", () => {
     const metrics = await items.listMetrics(a.item.id);
     expect(metrics).toHaveLength(1);
     expect(metrics[0]?.metricValue).toBe("42");
+  });
+});
+
+describe("趋势面排序（spec 08 §8、Phase 7）", () => {
+  it("trending 按最新 native 采样值降序；无采样卡片不参与；不跨来源求和", async () => {
+    const { sources, items } = makeStore();
+    const source = await sources.add({
+      connectorType: "hackernews",
+      name: "HN",
+      url: "https://hacker-news.firebaseio.com/v0/topstories.json",
+    });
+    // 三张卡：高分、低分、无指标（rss 源，不参与趋势）。
+    const upsertA = await items.upsertFromFetch({
+      sourceId: source.id,
+      sourceItemId: "1",
+      originalUrl: "https://example.com/a",
+      canonicalUrl: "https://example.com/a",
+      title: "高分卡",
+      seenAt: 1000,
+    });
+    const upsertB = await items.upsertFromFetch({
+      sourceId: source.id,
+      sourceItemId: "2",
+      originalUrl: "https://example.com/b",
+      canonicalUrl: "https://example.com/b",
+      title: "低分卡",
+      seenAt: 1000,
+    });
+    const rssSource = await sources.add({
+      connectorType: "rss_atom",
+      name: "RSS",
+      url: "https://example.com/rss",
+    });
+    await items.upsertFromFetch({
+      sourceId: rssSource.id,
+      sourceItemId: "r1",
+      originalUrl: "https://example.com/r1",
+      canonicalUrl: "https://example.com/r1",
+      title: "无指标卡",
+      seenAt: 1000,
+    });
+    await items.addMetric({
+      feedItemId: upsertA.item.id,
+      sourceId: source.id,
+      sampledAt: 2000,
+      metricName: "score",
+      metricValue: "300",
+      metricOrigin: "native_source",
+    });
+    await items.addMetric({
+      feedItemId: upsertB.item.id,
+      sourceId: source.id,
+      sampledAt: 2000,
+      metricName: "score",
+      metricValue: "20",
+      metricOrigin: "native_source",
+    });
+    // 旧采样（同一卡片更早的低值）不影响排序（取最新一次）。
+    await items.addMetric({
+      feedItemId: upsertA.item.id,
+      sourceId: source.id,
+      sampledAt: 1500,
+      metricName: "score",
+      metricValue: "80",
+      metricOrigin: "native_source",
+    });
+
+    const trending = await items.listCards({ trending: true, limit: 50 });
+    expect(trending.map((card) => card.title)).toEqual(["高分卡", "低分卡"]);
+
+    // 全量列表仍按时间序（趋势不影响默认视图）。
+    const all = await items.listCards({ limit: 50 });
+    expect(all).toHaveLength(3);
   });
 });

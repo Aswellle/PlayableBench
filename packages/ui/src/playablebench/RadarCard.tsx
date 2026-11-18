@@ -18,6 +18,8 @@ export interface RadarCardProps {
   feedback: string;
   /** 研究运行状态文本（如 running/completed），空串未启动。 */
   researchStatus: string;
+  /** 趋势面渲染中（spec 19 §6：标注"来源原生排名"，不冒充本应用计算）。 */
+  trendingMode?: boolean;
   onToggleFavorite: (item: FeedItem) => void;
   onToggleRead: (item: FeedItem) => void;
   onConvertToTask: (item: FeedItem) => void;
@@ -37,6 +39,7 @@ export const RadarCard = memo(function RadarCard({
   busy,
   feedback,
   researchStatus,
+  trendingMode = false,
   onToggleFavorite,
   onToggleRead,
   onConvertToTask,
@@ -71,6 +74,9 @@ export const RadarCard = memo(function RadarCard({
           <span className="truncate text-ui-base/relaxed text-foreground-subtle">
             {sourceName}
             {item.author ? ` · ${item.author}` : ""}
+            {trendingMode
+              ? ` · ${intl.formatMessage({ id: "playablebench.radar.nativeRanking" })}`
+              : ""}
           </span>
         </div>
         <div className="flex shrink-0 gap-1.5">

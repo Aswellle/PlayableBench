@@ -21,6 +21,14 @@ const RSS_ATOM_CAPABILITIES: FeedSourceCapabilities = {
   ],
 };
 
+/** 连接器采到的原生指标（spec 08 §8：按来源字段定义保存，不推断缺失值）。 */
+export interface FeedNativeMetric {
+  sourceItemId: string;
+  name: string;
+  value: string;
+  unit?: string;
+}
+
 export interface FeedFetchOutcome {
   status: "fetched" | "not_modified" | "failed";
   httpStatus?: number;
@@ -29,6 +37,7 @@ export interface FeedFetchOutcome {
   retryAfterSeconds?: number;
   errorCode?: string;
   items?: ParsedFeedItem[];
+  metrics?: FeedNativeMetric[];
 }
 
 export interface FeedConnector {
@@ -47,13 +56,19 @@ export function canonicalizeUrl(rawUrl: string): string {
     url.protocol = url.protocol.toLowerCase();
     url.hostname = url.hostname.toLowerCase();
     url.hash = "";
-    if ((url.protocol === "http:" && url.port === "80") || (url.protocol === "https:" && url.port === "443")) {
+    if (
+      (url.protocol === "http:" && url.port === "80") ||
+      (url.protocol === "https:" && url.port === "443")
+    ) {
       url.port = "";
     }
     const removeKeys: Array<string> = [];
     for (const key of new Set(url.searchParams.keys())) {
       const lower = key.toLowerCase();
-      if (TRACKING_PARAM_PREFIXES.some((prefix) => lower.startsWith(prefix)) || TRACKING_PARAMS.has(lower)) {
+      if (
+        TRACKING_PARAM_PREFIXES.some((prefix) => lower.startsWith(prefix)) ||
+        TRACKING_PARAMS.has(lower)
+      ) {
         removeKeys.push(key);
       }
     }
@@ -71,70 +86,90 @@ export function computeContentHash(title: string, summary?: string): string {
     .digest("hex");
 }
 
+/**
+ * RSS/Atom 抓取主体（HTTP + 受限解析 + 条件请求），供 rss_atom 与
+ * github_releases（同为 Atom 协议）复用；能力声明由各 connector 自持。
+ */
+export async function fetchAtomFeed(source: FeedSource): Promise<FeedFetchOutcome> {
+  {
+    const headers: Record<string, string> = {};
+    if (source.etag) headers["if-none-match"] = source.etag;
+    if (source.lastModified) headers["if-modified-since"] = source.lastModified;
+    let response;
+    try {
+      response = await guardedFetch(source.url, {
+        headers,
+        allowLoopback: false,
+        connectTimeoutMs: 10_000,
+        totalTimeoutMs: 20_000,
+        maxBytes: 2 * 1024 * 1024,
+        maxRedirects: 5,
+      });
+    } catch (error) {
+      if (error instanceof FetchGuardError) {
+        return { status: "failed", errorCode: error.kind };
+      }
+      return { status: "failed", errorCode: "network_error" };
+    }
+    if (response.status === 304) {
+      return {
+        status: "not_modified",
+        httpStatus: 304,
+        etag: response.etag ?? source.etag,
+        lastModified: response.lastModified ?? source.lastModified,
+      };
+    }
+    if (response.status === 429) {
+      return {
+        status: "failed",
+        httpStatus: 429,
+        retryAfterSeconds: response.retryAfterSeconds,
+        errorCode: "http_429",
+      };
+    }
+    if (response.status >= 400 && response.status < 500) {
+      return {
+        status: "failed",
+        httpStatus: response.status,
+        errorCode: `http_${response.status}`,
+      };
+    }
+    if (response.status >= 500) {
+      return {
+        status: "failed",
+        httpStatus: response.status,
+        errorCode: `http_${response.status}`,
+      };
+    }
+    if (response.status !== 200) {
+      return {
+        status: "failed",
+        httpStatus: response.status,
+        errorCode: `http_${response.status}`,
+      };
+    }
+    try {
+      const parsed = parseFeedDocument(response.bodyText);
+      return {
+        status: "fetched",
+        httpStatus: 200,
+        etag: response.etag,
+        lastModified: response.lastModified,
+        items: parsed.items,
+      };
+    } catch (error) {
+      if (error instanceof FeedParseError) {
+        return { status: "failed", httpStatus: 200, errorCode: `parse_${error.kind}` };
+      }
+      return { status: "failed", httpStatus: 200, errorCode: "parse_unknown" };
+    }
+  }
+}
+
 export function createRssAtomConnector(): FeedConnector {
   return {
     connectorType: "rss_atom",
     getCapabilities: () => ({ ...RSS_ATOM_CAPABILITIES }),
-    async fetch(source: FeedSource): Promise<FeedFetchOutcome> {
-      const headers: Record<string, string> = {};
-      if (source.etag) headers["if-none-match"] = source.etag;
-      if (source.lastModified) headers["if-modified-since"] = source.lastModified;
-      let response;
-      try {
-        response = await guardedFetch(source.url, {
-          headers,
-          allowLoopback: false,
-          connectTimeoutMs: 10_000,
-          totalTimeoutMs: 20_000,
-          maxBytes: 2 * 1024 * 1024,
-          maxRedirects: 5,
-        });
-      } catch (error) {
-        if (error instanceof FetchGuardError) {
-          return { status: "failed", errorCode: error.kind };
-        }
-        return { status: "failed", errorCode: "network_error" };
-      }
-      if (response.status === 304) {
-        return {
-          status: "not_modified",
-          httpStatus: 304,
-          etag: response.etag ?? source.etag,
-          lastModified: response.lastModified ?? source.lastModified,
-        };
-      }
-      if (response.status === 429) {
-        return {
-          status: "failed",
-          httpStatus: 429,
-          retryAfterSeconds: response.retryAfterSeconds,
-          errorCode: "http_429",
-        };
-      }
-      if (response.status >= 400 && response.status < 500) {
-        return { status: "failed", httpStatus: response.status, errorCode: `http_${response.status}` };
-      }
-      if (response.status >= 500) {
-        return { status: "failed", httpStatus: response.status, errorCode: `http_${response.status}` };
-      }
-      if (response.status !== 200) {
-        return { status: "failed", httpStatus: response.status, errorCode: `http_${response.status}` };
-      }
-      try {
-        const parsed = parseFeedDocument(response.bodyText);
-        return {
-          status: "fetched",
-          httpStatus: 200,
-          etag: response.etag,
-          lastModified: response.lastModified,
-          items: parsed.items,
-        };
-      } catch (error) {
-        if (error instanceof FeedParseError) {
-          return { status: "failed", httpStatus: 200, errorCode: `parse_${error.kind}` };
-        }
-        return { status: "failed", httpStatus: 200, errorCode: "parse_unknown" };
-      }
-    },
+    fetch: fetchAtomFeed,
   };
 }
