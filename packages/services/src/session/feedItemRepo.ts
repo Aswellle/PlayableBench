@@ -4,7 +4,12 @@
 // 失败/重复投递不产生重复行（upsert 语义即"失败不清空旧内容"的一半，
 // 另一半是抓取失败不删旧行——本仓库无任何按失败删除的路径）。
 import { randomUUID } from "node:crypto";
-import type { FeedItem, FeedItemUpsertInput, FeedMetricSnapshot, FeedMetricOrigin } from "@zcode/shared";
+import type {
+  FeedItem,
+  FeedItemUpsertInput,
+  FeedMetricSnapshot,
+  FeedMetricOrigin,
+} from "@zcode/shared";
 import { RunStoreConnection } from "#src/session/runStoreConnection.js";
 
 interface ItemRow {
@@ -92,6 +97,8 @@ export interface FeedCardQuery {
   sourceId?: string;
   favoritesOnly?: boolean;
   unreadOnly?: boolean;
+  /** 趋势面：按来源原生指标最新采样值降序（spec 08 §8）；无采样卡片不参与。 */
+  trending?: boolean;
   search?: string;
   limit?: number;
   offset?: number;
@@ -104,7 +111,11 @@ export class FeedItemRepo {
     return this.connection.getDatabase();
   }
 
-  private insertRow(input: FeedItemUpsertInput, attributionJson: string | null, now: number): string {
+  private insertRow(
+    input: FeedItemUpsertInput,
+    attributionJson: string | null,
+    now: number,
+  ): string {
     const id = `item-${randomUUID()}`;
     this.getDatabase()
       .prepare(
@@ -167,7 +178,8 @@ export class FeedItemRepo {
           .get(input.sourceId, input.sourceItemId) as ItemRow | undefined)
       : undefined;
     const byHash =
-      byItemId ?? (input.contentHash
+      byItemId ??
+      (input.contentHash
         ? (db
             .prepare(`SELECT * FROM pb_feed_items WHERE source_id = ? AND content_hash = ?`)
             .get(input.sourceId, input.contentHash) as ItemRow | undefined)
@@ -195,7 +207,9 @@ export class FeedItemRepo {
         now,
         existing.id,
       );
-      const updated = db.prepare(`SELECT * FROM pb_feed_items WHERE id = ?`).get(existing.id) as unknown as ItemRow;
+      const updated = db
+        .prepare(`SELECT * FROM pb_feed_items WHERE id = ?`)
+        .get(existing.id) as unknown as ItemRow;
       return {
         item: rowToItem(updated),
         created: false,
@@ -203,8 +217,14 @@ export class FeedItemRepo {
       };
     }
 
-    const id = this.insertRow(input, JSON.stringify([{ sourceId: input.sourceId, url: attributionUrl }]), now);
-    const created = db.prepare(`SELECT * FROM pb_feed_items WHERE id = ?`).get(id) as unknown as ItemRow;
+    const id = this.insertRow(
+      input,
+      JSON.stringify([{ sourceId: input.sourceId, url: attributionUrl }]),
+      now,
+    );
+    const created = db
+      .prepare(`SELECT * FROM pb_feed_items WHERE id = ?`)
+      .get(id) as unknown as ItemRow;
     return { item: rowToItem(created), created: true, deduplicatedBy: "none" };
   }
 
@@ -239,10 +259,32 @@ export class FeedItemRepo {
            WHERE fts_pb_feed_items MATCH ?`,
         )
         .all(`"${like.replace(/"/g, '""')}"`) as Array<{ id: string }>;
-      conditions.push(`(id IN (${fts.map(() => "?").join(",") || "''"}) OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')`);
+      conditions.push(
+        `(id IN (${fts.map(() => "?").join(",") || "''"}) OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')`,
+      );
       values.push(...fts.map((r) => r.id), likePattern, likePattern);
     }
     const where = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
+    if (query.trending) {
+      // 趋势面（spec 08 §8、spec 19 §6 文案规则）：只按来源原生指标的最新采样
+      // 值降序——不跨平台求和、不推断缺失值（无采样卡片不参与）；同一卡片取
+      // 最近一次采样（metric_origin=native_source）。
+      const trendSql = `
+        SELECT pb_feed_items.*,
+          (SELECT ms.metric_value FROM pb_feed_metric_snapshots AS ms
+           WHERE ms.feed_item_id = pb_feed_items.id AND ms.metric_origin = 'native_source'
+           ORDER BY ms.sampled_at DESC LIMIT 1) AS _trend_value
+        FROM pb_feed_items${where ? `${where} AND` : " WHERE"} EXISTS (
+            SELECT 1 FROM pb_feed_metric_snapshots AS ms2
+            WHERE ms2.feed_item_id = pb_feed_items.id AND ms2.metric_origin = 'native_source'
+          )
+        ORDER BY CAST(_trend_value AS REAL) DESC, COALESCE(published_at, first_seen_at) DESC
+        LIMIT ? OFFSET ?`;
+      const rows = this.getDatabase()
+        .prepare(trendSql)
+        .all(...values, limit, offset) as unknown as ItemRow[];
+      return rows.map(rowToItem);
+    }
     const rows = this.getDatabase()
       .prepare(
         `SELECT * FROM pb_feed_items${where}
@@ -268,7 +310,9 @@ export class FeedItemRepo {
     return this.get(id);
   }
 
-  async countCards(params?: { sourceId?: string }): Promise<{ unread: number; favorites: number; total: number }> {
+  async countCards(params?: {
+    sourceId?: string;
+  }): Promise<{ unread: number; favorites: number; total: number }> {
     await this.connection.ensureReady();
     const where = params?.sourceId ? ` WHERE source_id = ?` : "";
     const values = params?.sourceId ? [params.sourceId] : [];

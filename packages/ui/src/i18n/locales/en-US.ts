@@ -2097,6 +2097,8 @@ const enUS: Record<string, string> = {
   "playablebench.radar.filterAll": "All",
   "playablebench.radar.filterFavorites": "Favorites",
   "playablebench.radar.filterUnread": "Unread",
+  "playablebench.radar.filterTrending": "Trending (native)",
+  "playablebench.radar.nativeRanking": "native ranking",
   "playablebench.radar.favorite": "Favorite",
   "playablebench.radar.markRead": "Mark read",
   "playablebench.radar.read": "Read",

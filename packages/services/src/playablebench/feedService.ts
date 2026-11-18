@@ -31,6 +31,8 @@ export interface FeedCardQueryParams {
   sourceId?: string;
   favoritesOnly?: boolean;
   unreadOnly?: boolean;
+  /** 趋势面：按来源原生指标最新采样值降序（spec 08 §8）；无采样卡片不参与。 */
+  trending?: boolean;
   search?: string;
   limit?: number;
   offset?: number;
